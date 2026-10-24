@@ -1,5 +1,6 @@
 import { Outlet, createFileRoute } from '@tanstack/react-router'
 import { Footer, SupportButton } from '#/components/Footer'
+import { LocaleSuggestBanner } from '#/components/LocaleSuggestBanner'
 import { Nav } from '#/components/Nav'
 import { SiteNotice } from '#/components/SiteNotice'
 import { DEFAULT_LOCALE, isLocale } from '#/config/site'
@@ -16,6 +17,7 @@ export const Route = createFileRoute('/{-$locale}')({
 function LocaleLayout() {
   return (
     <>
+      <LocaleSuggestBanner />
       <SiteNotice />
       <Nav />
       <main className="min-h-[60vh]">

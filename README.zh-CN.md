@@ -271,7 +271,8 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
 - **安全**：非 GET 的 `/api/*`（webhook、CSP 报告和前端错误上报除外）要求 `Origin` 与站点同源；上传按文件头校验真实类型；上传和生成按用户限流；封禁用户会立即使会话失效；管理操作写入 `admin_audit`。
   - 登录后的 `redirect`（登录页和 Google 回调）只接受站内路径：`src/lib/redirect.ts` 拒绝反斜杠、控制字符，以及规范化后以 `//` 开头的地址，所以 `/sign-in?redirect=/\evil.com` 这类链接会落到个人中心。
   - 5xx 错误只对管理员返回 `message`；其他人只拿到错误码，详情以 `[api] <method> <path> <code>: <message>` 写入 Workers Logs。
-  - Google 登录：授权码流程带 PKCE（S256）和 nonce；One Tap 初始化前先从 `/api/auth/google/nonce` 取 nonce（同时写进 cookie），提交时两者必须一致。
+  - Google 登录：授权码流程带 PKCE（S256）和 nonce；One Tap 初始化前先从 `/api/auth/google/nonce` 取 nonce（同时写进 cookie），提交时两者必须一致。访客关掉 One Tap 后，同一个浏览器标签页里不再弹出（`sessionStorage`）；登录页和后台不弹。`auto_select` 保持关闭。
+  - 语言：`Accept-Language` 里权重最高、且本站已启用的语言如果和网址语言不同，页顶会问要不要切换。切换保留 query 和 hash；关闭后这个标签页里不再显示。网址不会自己变，也不按国家或 IP 选语言。说明见 [docs/google-one-tap-and-locale.md](docs/google-one-tap-and-locale.md)。
   - 账号以 Google 的 `sub` 为准：同一邮箱换了 Google 账号（`sub` 不同）会被拒绝登录，登录页提示联系客服（`account_conflict`）；dev 登录建的账号（没有 `sub`）在第一次 Google 登录时绑定。
   - 注销账号只保留邮箱的加盐哈希（`deleted_accounts` 表，盐是 `SESSION_SECRET`），同一邮箱重新注册时不发注册赠送、不绑定邀请人。更换 `SESSION_SECRET` 后旧记录对不上。
   - 上传请求必须带 `Content-Length`（否则 411），超过上限直接 413，不读请求体。服务商成片超过 100 MB 判失败并退积分；带长度时流式写入 R2，没带长度时边读边计数，超过 48 MB 即停止。

@@ -58,6 +58,12 @@ export function en(s: S) {
       credits: (n: number) => `${n} credits`,
       menu: 'Menu',
     },
+    localeSuggest: {
+      label: 'Language suggestion',
+      banner: (localeName: string) => `Suggest switch to ${localeName}?`,
+      switch: 'Switch',
+      dismiss: 'Dismiss',
+    },
     hero: {
       title: `${k} AI Video Generator`,
       subtitle: `Turn a single selfie into your own take on the ${k} clip. We keep the choreography, timing and framing of the original and cast you as the lead.`,

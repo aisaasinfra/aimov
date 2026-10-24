@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api, errorCode, type ClientConfig, type PublicUser } from './api'
 import { site } from '#/config/site'
 import { captureAttribution, track } from './attribution'
+import { isOneTapDismissed, oneTapCloseReason, rememberOneTapDismissed, type OneTapPromptNotification } from './google-one-tap'
 
 type SessionState = {
   user: PublicUser | null
@@ -78,7 +79,7 @@ type GoogleId = {
   accounts: {
     id: {
       initialize: (options: Record<string, unknown>) => void
-      prompt: () => void
+      prompt: (momentListener?: (notification: OneTapPromptNotification) => void) => void
       cancel: () => void
     }
   }
@@ -87,14 +88,18 @@ type GoogleId = {
 function GoogleOneTap({ clientId, onSignedIn }: { clientId: string; onSignedIn: () => Promise<void> }) {
   useEffect(() => {
     if (location.pathname.startsWith('/admin') || location.pathname.includes('sign-in')) return
+    // 访客关掉过提示：这个标签页里不再弹，也不再去取 nonce
+    if (isOneTapDismissed()) return
     let cancelled = false
+    // 卸载时我们自己调用 cancel()，那一次的 cancel_called 不是访客关掉
+    let ignoreCancel = false
     let nonce: Promise<string | null> | null = null
     const start = async () => {
       const google = (window as unknown as { google?: GoogleId }).google
-      if (cancelled || !google) return
+      if (cancelled || !google || isOneTapDismissed()) return
       // 服务端签发的 nonce 同时存在 cookie 里，提交 credential 时核对，防止截获的 id_token 被重放
       const value = await nonce
-      if (cancelled || !value) return
+      if (cancelled || !value || isOneTapDismissed()) return
       google.accounts.id.initialize({
         client_id: clientId,
         nonce: value,
@@ -114,7 +119,10 @@ function GoogleOneTap({ clientId, onSignedIn }: { clientId: string; onSignedIn: 
           }
         },
       })
-      google.accounts.id.prompt()
+      google.accounts.id.prompt((notification) => {
+        if (cancelled || ignoreCancel) return
+        if (oneTapCloseReason(notification)) rememberOneTapDismissed()
+      })
     }
     nonce = api<{ nonce: string }>('/api/auth/google/nonce')
       .then((data) => data.nonce)
@@ -135,6 +143,7 @@ function GoogleOneTap({ clientId, onSignedIn }: { clientId: string; onSignedIn: 
     }
     return () => {
       cancelled = true
+      ignoreCancel = true
       ;(window as unknown as { google?: GoogleId }).google?.accounts.id.cancel()
     }
   }, [clientId, onSignedIn])

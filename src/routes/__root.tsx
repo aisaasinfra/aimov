@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState, type ErrorComponentProps } from '@tanstack/react-router'
+import { getGlobalStartContext } from '@tanstack/react-start'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ConsentBanner } from '#/components/ConsentBanner'
 import { Footer } from '#/components/Footer'
@@ -8,6 +9,7 @@ import { LocalLink } from '#/components/ui'
 import { site } from '#/config/site'
 import { ga4BootstrapScript } from '#/lib/consent'
 import { installErrorReporting, reportClientError } from '#/lib/error-report'
+import { sanitizeAcceptLanguage } from '#/lib/accept-language'
 import { htmlLang, loadContent, localeFromPathname, useContent } from '#/lib/i18n'
 import { SessionProvider } from '#/lib/session'
 import css from '../styles.css?url'
@@ -36,6 +38,13 @@ export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
     await loadContent(localeFromPathname(location.pathname))
   },
+  // 文档请求上的 Accept-Language。客户端导航不重取：没有头时返回 null，横幅用第一次看到的值
+  loader: () => {
+    if (!import.meta.env.SSR) return { acceptLanguage: null as string | null }
+    const context = getGlobalStartContext() as { acceptLanguage?: string | null } | undefined
+    return { acceptLanguage: sanitizeAcceptLanguage(context?.acceptLanguage) }
+  },
+  staleTime: Number.POSITIVE_INFINITY,
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
