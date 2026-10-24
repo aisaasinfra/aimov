@@ -264,7 +264,8 @@ e2e 跑在本地 dev server 上，支付、视频、审核服务商都是 mock�
 - 第三方校验：Turnstile 的启用与失败分支，OpenAI 审核接口异常时拒绝（fail closed）（`compliance.test.ts`）。
 - 发信重试：临时错误退避、永久错误不重试，邮件头注入（`email.test.ts`）。
 - 生产开关：生产和预发拒绝 mock（`providers.test.ts`）、弱 `SESSION_SECRET`（`security.test.ts`）、上线配置与 doctor（`config-health.test.ts`）、预发配置与 robots（`staging.test.ts`）。
-- 登录：Google 授权码流程的 PKCE 与 nonce、One Tap 的 nonce（`google.test.ts`）；账号以 Google `sub` 为准、注销过的邮箱重新注册不发赠送（`auth.test.ts`）。
+- 登录：Google 授权码流程的 PKCE 与 nonce、One Tap 的 nonce（`google.test.ts`）；One Tap 关闭原因和标签页记忆（`google-one-tap.test.ts`）；账号以 Google `sub` 为准、注销过的邮箱重新注册不发赠送（`auth.test.ts`）。
+- 语言建议：`Accept-Language` 排名、与当前语言相同则不提示、切换链接保留 query/hash、关闭记忆（`accept-language.test.ts`）。不测地理定位，代码里没有这条路径。
 - 成片下载：服务商返回的成片超过大小上限时不写 R2，没有 Content-Length 时边读边计数（`output-download.test.ts`）。
 - 运维：D1 导出的 SQL 转义与备份文件命名（`backup.test.ts`）；付款即时通知按 webhook 地址识别 Telegram、飞书、Discord，报错里不带地址（`chat-notify.test.ts`）。
 - 其他：告警阈值与时间桶（`alerts.test.ts`）、归因解析与 CSV 公式注入（`attribution.test.ts`）、归因 Cookie 在同意后才写入、拒绝时删除（`attribution-consent.test.ts`）、GA4 同意与撤回（`consent.test.ts`）、错误与 CSP 报告的脱敏（`client-error.test.ts`、`csp.test.ts`）。

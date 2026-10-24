@@ -47,7 +47,8 @@ export default {
     // 分享页：先查好数据交给页面渲染 OG 标签，失效的链接返回 404/410；页面一律 noindex（用户内容不进搜索引擎）
     const shareId = !toHono && request.method === 'GET' ? pathname.match(SHARE_PAGE)?.[1] : undefined
     const share = shareId !== undefined ? await loadShare(env, shareId) : undefined
-    let response = nonce ? await handler.fetch(request, { context: { nonce, share } }) : await app.fetch(request, env, ctx)
+    const acceptLanguage = request.headers.get('accept-language')
+    let response = nonce ? await handler.fetch(request, { context: { nonce, share, acceptLanguage } }) : await app.fetch(request, env, ctx)
     if (share) {
       const headers = new Headers(response.headers)
       headers.set('X-Robots-Tag', 'noindex')

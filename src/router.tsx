@@ -27,6 +27,6 @@ declare module '@tanstack/react-router' {
   interface Register {
     router: ReturnType<typeof getRouter>
     // share：分享页 /v/<id> 的数据，src/server.ts 渲染前查好（见 routes/{-$locale}/v.$shareId.tsx）
-    server: { requestContext: { nonce: string; share?: ShareView } }
+    server: { requestContext: { nonce: string; share?: ShareView; acceptLanguage?: string | null } }
   }
 }

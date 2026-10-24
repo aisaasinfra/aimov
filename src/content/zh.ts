@@ -51,6 +51,12 @@ export function zh(s: S): Content {
       credits: (n: number) => `${n} 积分`,
       menu: '菜单',
     },
+    localeSuggest: {
+      label: '语言建议',
+      banner: (localeName: string) => `建议切换到${localeName}？`,
+      switch: '切换',
+      dismiss: '关闭',
+    },
     hero: {
       title: `${k} AI 视频生成器`,
       subtitle: `只要一张自拍，就能拍出属于你的 ${k} 视频。原片的舞步、节奏和镜头全部保留，主角换成你。`,
