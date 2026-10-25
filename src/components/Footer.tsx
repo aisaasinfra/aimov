@@ -16,6 +16,8 @@ export function Footer() {
       links: [
         { to: '/guides', label: c.guides.nav },
         ...ARTICLES.slice(0, FOOTER_ARTICLES).map((article) => ({ to: `/${article.slug}`, label: c.articles[article.key].title })),
+        { to: '/changelog', label: c.footer.changelog },
+        { to: '/waitlist', label: c.footer.waitlist },
         { to: '/pricing', label: c.nav.pricing },
         { to: '/contact', label: c.footer.contact },
       ],

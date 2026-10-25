@@ -40,6 +40,7 @@ function DashboardLayout() {
   const tabs = [
     { to: '/dashboard', label: d.tabs.videos },
     { to: '/dashboard/billing', label: d.tabs.billing },
+    { to: '/dashboard/feedback', label: d.tabs.feedback },
     { to: '/dashboard/settings', label: d.tabs.settings },
   ]
   return (

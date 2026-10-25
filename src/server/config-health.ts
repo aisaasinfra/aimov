@@ -22,6 +22,13 @@ export interface ConfigInput {
 
 // .dev.vars.example 里的占位值：模板公开后人人都知道，生产环境不能用
 export const EXAMPLE_SESSION_SECRET = 'change-me-to-a-long-random-string'
+
+// 与 src/server/sentry.ts 的 parseSentryDsn 同一格式。空 DSN 表示关闭，不在这里报错。
+export const SENTRY_DSN_PATTERN = /^https:\/\/([0-9a-f]+)@([A-Za-z0-9.-]+)\/([0-9]+)$/i
+
+export function isSentryDsn(value: string) {
+  return SENTRY_DSN_PATTERN.test(value.trim())
+}
 export const REQUIRED_BINDINGS = [
   'DB',
   'MEDIA',
@@ -176,7 +183,13 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
   else requireSecrets(MODERATION_SECRETS[moderation], '图片审核')
 
   if (vars('TURNSTILE_SITE_KEY')) requireSecrets(['TURNSTILE_SECRET_KEY'], 'Turnstile')
-  else warn('TURNSTILE_SITE_KEY', 'TURNSTILE_SITE_KEY 为空：留言和举报表单没有人机校验，只靠限流')
+  else warn('TURNSTILE_SITE_KEY', 'TURNSTILE_SITE_KEY 为空：留言、举报和等待列表没有人机校验，只靠限流')
+
+  // 可选。doctor 只知道 secret 是否存在（值为 true），格式要等运行时拿到字符串再查。不合法就保持关闭，不阻断上线。
+  const sentry = input.secrets.SENTRY_DSN
+  if (typeof sentry === 'string' && text(sentry) && !isSentryDsn(sentry)) {
+    warn('SENTRY_DSN', 'SENTRY_DSN 不是 https://<key>@<host>/<project>：错误上报保持关闭')
+  }
 
   // 付款即时通知（可选）：只检查格式，不输出地址（里面带 token）
   const chat = input.secrets.PAYMENT_NOTIFY_WEBHOOK_URL

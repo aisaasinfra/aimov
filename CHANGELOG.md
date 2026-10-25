@@ -4,6 +4,24 @@ Notable changes to the template. Derived sites pick them up with `git merge` fro
 
 中文说明在每条下方。
 
+The in-app page is `/changelog` (English and Chinese). This file stays the repo log.
+
+站内页面是 `/changelog`（中英文）。本文件仍是仓库日志。
+
+## 2026-10-25
+
+### Added: LLM docs, optional error reporting, waitlist, feedback, changelog page
+
+- Public `llms.txt`, `llms-full.txt`, and `/docs-md/{overview,pricing,changelog,waitlist}` describe the video product, locales, and routes. Production `robots.txt` points at the first two with comments. Staging still disallows the whole site and does not advertise them.
+- `SENTRY_DSN` forwards scrubbed worker, API, and browser errors to a Sentry-compatible envelope endpoint. Blank, invalid, localhost, or IP hosts send nothing. Workers Logs stay the default. No Sentry SDK.
+- Public waitlist (`/waitlist`) with Turnstile when configured, admin list, and CSV export. Duplicate emails are idempotent. It does not create an account.
+- Signed-in product feedback (`/dashboard/feedback`) and admin statuses open / planned / shipped / closed. Separate from contact and takedown. Account export includes it; account deletion removes it.
+- In-app `/changelog` driven by `src/content/changelog.ts`.
+
+Upgrading a site: merge, then `npm run db:migrate:remote` (migration `0016_waitlist_feedback.sql`). Optional secret `SENTRY_DSN`. No new vars.
+
+新增：给问答引擎的 `llms.txt`、可选的 Sentry 兼容错误上报、公开等待列表、登录后的产品反馈、站内更新日志。站点升级：合并后跑 `npm run db:migrate:remote`（迁移 `0016_waitlist_feedback.sql`）。可选 secret `SENTRY_DSN`。没有新增 vars。
+
 ## 2026-10-25
 
 ### Fixed: sign-in and checkout returns counted as traffic sources

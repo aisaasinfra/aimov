@@ -7,6 +7,8 @@ interface Env {
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
   PAYMENT_NOTIFY_WEBHOOK_URL?: string
+  // 可选。空着则不向 Sentry（或兼容的 envelope 端点）上报，错误仍只进 Workers 日志。
+  SENTRY_DSN?: string
   // PayPal.cn（Orders v2）。模式和主机在 wrangler vars；这三个是 secret。
   PAYPAL_CLIENT_ID?: string
   PAYPAL_CLIENT_SECRET?: string

@@ -154,7 +154,16 @@
    - ~~#8~~ 已完成（2026-10-21）。邀请奖励（只发积分，不发现金），见下文。
    - ~~#10~~ 已完成（2026-10-21）。后台运营参数与服务商连接测试（密钥不进数据库），见下文。
    - ~~#7~~ 已完成（2026-10-21）。订阅（月付、年付），见下文。
-4. P2 按需：运维脚本、~~群聊付款通知~~（已完成，见下文）、营销邮件订阅、多家统计、在线客服、`llms.txt`、协作模板、Demo 模式、RBAC、只读的“以用户身份查看”、AdSense 开关、回信转发、仅邀请注册、注册来源问卷、dependabot。
+4. P2 按需：运维脚本、~~群聊付款通知~~（已完成，见下文）、营销邮件订阅、多家统计、在线客服、~~`llms.txt`~~（已完成，见下文）、协作模板、Demo 模式、RBAC、只读的“以用户身份查看”、AdSense 开关、回信转发、仅邀请注册、注册来源问卷、dependabot。AI 图像生成是独立里程碑，本轮不做。
+
+**FlareStarter 缺口回填**（2026-10-25，仍以 aimov / ShrimpReel 为底，不换成 FlareStarter）
+
+- `llms.txt`、`llms-full.txt`、`/docs-md/*`：给问答引擎的公开 Markdown。正式站 `robots.txt` 用注释指向前两个。
+- `SENTRY_DSN` 可选。留空不发请求，错误仍进 Workers 日志。不装 Sentry SDK。
+- 公开等待列表（Turnstile、后台名单、CSV）。不创建账号，登录仍只有 Google。
+- 登录后的产品反馈和管理员状态（open / planned / shipped / closed），和联系、举报分开。
+- 站内 `/changelog`（中英文，内容模块），不只是仓库 `CHANGELOG.md`。
+- 未做：AI 图像产品、better-auth、Stripe-only `requirePlan`、赞助页、域名和线上部署。
 
 **#33 yir.ai 视频服务商**（群友建议，2026-10-21 评估并接入）
 

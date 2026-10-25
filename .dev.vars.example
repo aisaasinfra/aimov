@@ -26,3 +26,5 @@ OPENAI_API_KEY=
 TURNSTILE_SECRET_KEY=
 # 付款即时通知（可选）：Telegram / 飞书 / Discord / Slack 的 webhook 地址，见 docs/env.md
 PAYMENT_NOTIFY_WEBHOOK_URL=
+# 可选错误上报（Sentry 兼容的 envelope）。留空 = 关闭，错误仍只进 Workers 日志。不要填内网或 IP 地址。
+SENTRY_DSN=

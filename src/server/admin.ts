@@ -8,7 +8,9 @@ import { failGeneration } from './jobs'
 import { serveR2Object } from './media'
 import { assertProviderRefundAllowed, localRefundKey, refundOrder } from './orders'
 import { notifyOrderPaid, notifyTakedownResolved } from './notifications'
+import { registerFeedbackAdminRoutes } from './feedback'
 import { registerProbeAdminRoutes } from './probes'
+import { registerWaitlistAdminRoutes } from './waitlist'
 import { getOrderProvider } from './payments'
 import { reconcileOrder } from './reconcile'
 import { registerRedeemAdminRoutes } from './redeem'
@@ -27,6 +29,8 @@ adminRoutes.use('*', async (c, next) => {
 })
 
 registerReportRoutes(adminRoutes)
+registerWaitlistAdminRoutes(adminRoutes)
+registerFeedbackAdminRoutes(adminRoutes)
 registerRedeemAdminRoutes(adminRoutes)
 registerReferralAdminRoutes(adminRoutes)
 registerSettingsAdminRoutes(adminRoutes)

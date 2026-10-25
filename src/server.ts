@@ -5,6 +5,7 @@ import { runDailyBackup } from './server/backup'
 import { PERMISSIONS_POLICY, contentSecurityPolicy, createNonce } from './server/csp'
 import { handleDeadLetterBatch, handleQueueBatch, runScheduledMaintenance } from './server/jobs'
 import { runNotificationCron } from './server/notifications'
+import { reportWorkerError } from './server/sentry'
 import { isSeoPath } from './server/seo'
 import { SHARE_PAGE, loadShare, shareHttpStatus } from './server/shares'
 import { isProduction } from './server/util'
@@ -22,42 +23,52 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Permissions-Policy': PERMISSIONS_POLICY,
 }
 
+async function handleFetch(request: Request, env: Env, ctx: ExecutionContext, url: URL) {
+  const { pathname } = url
+  const toHono = pathname.startsWith('/api/') || pathname.startsWith('/media/') || pathname.startsWith('/i/') || isSeoPath(pathname)
+  // 页面统一无尾斜杠：/pricing/ → 301 /pricing（TanStack 默认 307，不传递权重）
+  if (!toHono && pathname.length > 1 && pathname.endsWith('/') && (request.method === 'GET' || request.method === 'HEAD')) {
+    url.pathname = pathname.replace(/\/+$/, '') || '/'
+    return withSecurityHeaders(Response.redirect(url.toString(), 301), env, url)
+  }
+  // 先 302 去掉多余参数再渲染：邮箱不会进页面、前端统计、错误上报和浏览器历史（第一次请求的 URL 仍会出现在 Workers 日志里）
+  if (request.method === 'GET' && CHECKOUT_RESULT_PAGE.test(pathname) && [...url.searchParams.keys()].some((key) => key !== 'order')) {
+    const order = url.searchParams.get('order')
+    url.search = order ? `?order=${encodeURIComponent(order)}` : ''
+    const response = new Response(null, { status: 302, headers: { Location: `${url.pathname}${url.search}`, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } })
+    return withSecurityHeaders(response, env, url)
+  }
+  if (isProduction(env) && MOCK_CHECKOUT_PAGE.test(pathname)) {
+    return withSecurityHeaders(new Response('Not found', { status: 404, headers: { 'X-Robots-Tag': 'noindex' } }), env, url)
+  }
+  // 页面请求生成 CSP nonce，经请求上下文交给 router（src/router.tsx 的 ssr.nonce），内联脚本都会带上它
+  const nonce = toHono ? undefined : createNonce()
+  // 分享页：先查好数据交给页面渲染 OG 标签，失效的链接返回 404/410；页面一律 noindex（用户内容不进搜索引擎）
+  const shareId = !toHono && request.method === 'GET' ? pathname.match(SHARE_PAGE)?.[1] : undefined
+  const share = shareId !== undefined ? await loadShare(env, shareId) : undefined
+  const acceptLanguage = request.headers.get('accept-language')
+  let response = nonce ? await handler.fetch(request, { context: { nonce, share, acceptLanguage } }) : await app.fetch(request, env, ctx)
+  if (share) {
+    const headers = new Headers(response.headers)
+    headers.set('X-Robots-Tag', 'noindex')
+    headers.set('Cache-Control', 'no-store')
+    const status = response.status === 200 ? shareHttpStatus(share) : response.status
+    response = new Response(response.body, { status, statusText: '', headers })
+  }
+  if (import.meta.env.DEV) await drainUnreadBody(request)
+  return withSecurityHeaders(response, env, url, nonce)
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url)
-    const { pathname } = url
-    const toHono = pathname.startsWith('/api/') || pathname.startsWith('/media/') || pathname.startsWith('/i/') || isSeoPath(pathname)
-    // 页面统一无尾斜杠：/pricing/ → 301 /pricing（TanStack 默认 307，不传递权重）
-    if (!toHono && pathname.length > 1 && pathname.endsWith('/') && (request.method === 'GET' || request.method === 'HEAD')) {
-      url.pathname = pathname.replace(/\/+$/, '') || '/'
-      return withSecurityHeaders(Response.redirect(url.toString(), 301), env, url)
+    try {
+      return await handleFetch(request, env, ctx, url)
+    } catch (error) {
+      console.error(error)
+      ctx.waitUntil(reportWorkerError(env, error, { method: request.method, path: url.pathname, kind: 'worker' }))
+      return withSecurityHeaders(new Response('Internal Server Error', { status: 500, headers: { 'Cache-Control': 'no-store' } }), env, url)
     }
-    // 先 302 去掉多余参数再渲染：邮箱不会进页面、前端统计、错误上报和浏览器历史（第一次请求的 URL 仍会出现在 Workers 日志里）
-    if (request.method === 'GET' && CHECKOUT_RESULT_PAGE.test(pathname) && [...url.searchParams.keys()].some((key) => key !== 'order')) {
-      const order = url.searchParams.get('order')
-      url.search = order ? `?order=${encodeURIComponent(order)}` : ''
-      const response = new Response(null, { status: 302, headers: { Location: `${url.pathname}${url.search}`, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } })
-      return withSecurityHeaders(response, env, url)
-    }
-    if (isProduction(env) && MOCK_CHECKOUT_PAGE.test(pathname)) {
-      return withSecurityHeaders(new Response('Not found', { status: 404, headers: { 'X-Robots-Tag': 'noindex' } }), env, url)
-    }
-    // 页面请求生成 CSP nonce，经请求上下文交给 router（src/router.tsx 的 ssr.nonce），内联脚本都会带上它
-    const nonce = toHono ? undefined : createNonce()
-    // 分享页：先查好数据交给页面渲染 OG 标签，失效的链接返回 404/410；页面一律 noindex（用户内容不进搜索引擎）
-    const shareId = !toHono && request.method === 'GET' ? pathname.match(SHARE_PAGE)?.[1] : undefined
-    const share = shareId !== undefined ? await loadShare(env, shareId) : undefined
-    const acceptLanguage = request.headers.get('accept-language')
-    let response = nonce ? await handler.fetch(request, { context: { nonce, share, acceptLanguage } }) : await app.fetch(request, env, ctx)
-    if (share) {
-      const headers = new Headers(response.headers)
-      headers.set('X-Robots-Tag', 'noindex')
-      headers.set('Cache-Control', 'no-store')
-      const status = response.status === 200 ? shareHttpStatus(share) : response.status
-      response = new Response(response.body, { status, statusText: '', headers })
-    }
-    if (import.meta.env.DEV) await drainUnreadBody(request)
-    return withSecurityHeaders(response, env, url, nonce)
   },
 
   async queue(batch: MessageBatch<VideoJobMessage>, env: Env) {
