@@ -107,6 +107,7 @@ export function zh(s: S): Content {
       wallBody: '每张图都是准备好的圣诞 3D 世界。选定一个，上传照片，在那个场景里生成节日视频。',
       use: '选用',
       selected: '已选',
+      selectedWorld: '已选世界',
       seconds: (n: number) => `${n} 秒`,
       create: '生成',
       choosePhoto: '选择照片',

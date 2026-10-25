@@ -154,7 +154,8 @@
   background: radial-gradient(60% 50% at 70% 30%, var(--glow), transparent 70%);
 }
 
-/* Merry Us play studio: cream page, pine type, berry Create, coverflow of 3D worlds. */
+/* Merry Us play studio: cream page, pine type, berry Create, coverflow of 3D worlds.
+   桌面首屏整条是一张铺满的封面流，左侧文案和操作台浮在上面；左侧卡片淡进奶油底，不抢点击。 */
 .play-hero {
   overflow-x: clip;
   background-color: var(--bg);
@@ -166,15 +167,45 @@
 }
 
 .christmas-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  overflow: hidden;
+  padding-top: 0.7rem;
+  padding-bottom: 1rem;
+}
+
+.christmas-hero-overlay,
+.christmas-hero-panel {
+  display: contents;
+}
+
+.christmas-hero-copy {
+  order: 1;
+  margin-inline: 1.25rem;
+}
+
+.christmas-hero-flow {
+  order: 2;
+  position: relative;
+  overflow: hidden;
+}
+
+.play-studio {
+  order: 3;
   display: grid;
-  gap: 0.85rem;
-  align-items: start;
-  padding-top: 1rem;
-  padding-bottom: 1.5rem;
+  margin-inline: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--card);
 }
 
 .christmas-hero-more {
+  order: 4;
   width: fit-content;
+  margin-inline: 1.25rem;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--muted);
@@ -184,13 +215,6 @@
 .christmas-hero-more:hover {
   color: var(--fg);
   text-decoration: underline;
-}
-
-.play-studio {
-  display: grid;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: var(--card);
 }
 
 .play-studio-photo {
@@ -203,9 +227,55 @@
   padding: 0.65rem 1rem 1rem;
 }
 
+.play-selected-world {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--bg) 72%, var(--card));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.play-selected-world img {
+  width: 2.15rem;
+  height: 2.85rem;
+  flex: none;
+  border-radius: 0.45rem;
+  object-fit: cover;
+  object-position: top;
+  background: var(--bg-soft);
+}
+
+.play-selected-kicker {
+  display: block;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.play-selected-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  line-height: 1.2;
+  color: var(--fg);
+}
+
+.merry-coverflow {
+  position: relative;
+  height: 100%;
+  min-height: 12.5rem;
+  user-select: none;
+  touch-action: pan-y;
+}
+
 .merry-coverflow-stage {
   position: relative;
-  height: 15.5rem;
+  height: 11.25rem;
   perspective: 900px;
   touch-action: pan-y;
 }
@@ -214,13 +284,15 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: min(46vw, 9.5rem);
+  width: min(34vw, 7.35rem);
   margin: 0;
   padding: 0;
   border: 0;
   background: transparent;
   border-radius: 1.35rem;
-  transition: transform 480ms ease;
+  cursor: pointer;
+  touch-action: pan-y;
+  transition: transform 380ms ease;
 }
 
 .merry-coverflow-card[data-offset='0'] {
@@ -269,6 +341,7 @@
   height: 100%;
   object-fit: cover;
   object-position: top;
+  -webkit-user-drag: none;
 }
 
 .merry-coverflow-card[data-offset='0'] .merry-coverflow-frame {
@@ -300,10 +373,17 @@
   opacity: 1;
 }
 
+.merry-coverflow-fade {
+  display: none;
+}
+
 .merry-coverflow-caption {
+  position: relative;
+  z-index: 6;
   display: flex;
   justify-content: center;
-  padding: 0.35rem 0.15rem 0;
+  padding: 0.15rem 1.25rem 0;
+  pointer-events: none;
 }
 
 .merry-coverflow-caption-inner {
@@ -314,66 +394,140 @@
   gap: 0.75rem;
 }
 
-@media (min-width: 1024px) {
-  .christmas-hero {
-    grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
-    column-gap: 1.75rem;
-    row-gap: 0.85rem;
-    padding-top: 1.75rem;
-    padding-bottom: 2.25rem;
-  }
-
-  .christmas-hero-copy {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .play-studio {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
+@media (min-width: 640px) and (max-width: 1023px) {
+  .christmas-hero-copy,
+  .play-studio,
   .christmas-hero-more {
-    grid-column: 1;
-    grid-row: 3;
-    margin-top: 0.15rem;
-  }
-
-  .christmas-hero-flow {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    align-self: center;
-  }
-
-  .merry-coverflow-stage {
-    height: 24.5rem;
-    perspective: 1200px;
-  }
-
-  .merry-coverflow-card {
-    width: 16.25rem;
-  }
-
-  .merry-coverflow-caption-inner {
-    width: 22rem;
+    margin-inline: 2rem;
   }
 }
 
-@media (max-width: 1023px) {
-  .christmas-hero-copy {
-    order: 1;
+@media (min-width: 1024px) {
+  .christmas-hero {
+    display: block;
+    min-height: 36rem;
+    padding: 0;
   }
 
   .christmas-hero-flow {
-    order: 2;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    order: 0;
+    margin: 0;
   }
 
-  .play-studio {
-    order: 3;
+  .christmas-hero-overlay {
+    position: relative;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    min-height: 36rem;
+    pointer-events: none;
   }
 
+  .christmas-hero-panel {
+    display: grid;
+    gap: 0.75rem;
+    width: min(24rem, 100%);
+    padding: 1.05rem 1.05rem 0.9rem;
+    pointer-events: auto;
+    border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+    border-radius: 1.35rem;
+    background: color-mix(in srgb, var(--card) 86%, transparent);
+    box-shadow: 0 18px 46px rgba(32, 61, 50, 0.12);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .christmas-hero-copy,
+  .play-studio,
   .christmas-hero-more {
-    order: 4;
+    order: 0;
+    margin-inline: 0;
+  }
+
+  .christmas-hero-panel .play-studio {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .christmas-hero-panel .play-studio-photo,
+  .christmas-hero-panel .play-studio-actions {
+    padding-right: 0.15rem;
+    padding-left: 0.15rem;
+  }
+
+  .merry-coverflow {
+    min-height: 0;
+  }
+
+  .merry-coverflow-stage {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    perspective: 1400px;
+  }
+
+  .merry-coverflow-card {
+    left: 56%;
+    width: clamp(11.5rem, 14vw, 15.5rem);
+  }
+
+  .merry-coverflow-card[data-offset='-1'] {
+    transform: translate(calc(-50% - clamp(8.5rem, 15vw, 14rem)), -50%) rotateY(32deg) scale(0.84);
+  }
+
+  .merry-coverflow-card[data-offset='1'] {
+    transform: translate(calc(-50% + clamp(8.5rem, 15vw, 14rem)), -50%) rotateY(-32deg) scale(0.84);
+  }
+
+  .merry-coverflow-card[data-offset='-2'] {
+    pointer-events: none;
+    transform: translate(calc(-50% - clamp(14.5rem, 30vw, 28rem)), -50%) rotateY(46deg) scale(0.68);
+  }
+
+  .merry-coverflow-card[data-offset='2'] {
+    transform: translate(calc(-50% + clamp(14.5rem, 30vw, 28rem)), -50%) rotateY(-46deg) scale(0.68);
+  }
+
+  .merry-coverflow-fade {
+    position: absolute;
+    z-index: 6;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    display: block;
+    width: 44vw;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--bg) 94%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 82%, transparent) 42%,
+      color-mix(in srgb, var(--bg) 46%, transparent) 70%,
+      transparent 100%
+    );
+  }
+
+  .merry-coverflow-caption {
+    position: absolute;
+    bottom: 1.15rem;
+    left: 56%;
+    width: max-content;
+    max-width: min(18rem, 42vw);
+    padding: 0;
+    transform: translateX(-50%);
+  }
+
+  .merry-coverflow-caption-inner {
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .merry-coverflow-frame-note {
+    display: none;
   }
 }
 
@@ -490,7 +644,7 @@ body[data-play-chrome] [data-support-fab] {
   }
 
   .merry-coverflow-stage {
-    height: 10.5rem;
+    height: 12rem;
   }
 
   .merry-coverflow-card {

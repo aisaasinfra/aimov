@@ -41,19 +41,23 @@ function HomePage() {
   return (
     <>
       <section id="create" className="play-hero" data-testid="play-hero">
-        <div className="christmas-hero container-page">
-          <div className="christmas-hero-copy">
-            <p className="w-fit rounded-full bg-[#fff2d3] px-3 py-1 text-xs font-medium text-[#203d32]">{c.hero.badge}</p>
-            <h1 className="mt-3 font-display text-4xl leading-[1.05] tracking-tight sm:text-5xl">
-              {c.hero.title} <em className="text-accent">{c.hero.accent}</em>
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">{c.hero.subtitle}</p>
-          </div>
-          <Generator />
+        <div className="christmas-hero">
           <SceneCoverflow />
-          <a href="#examples" className="christmas-hero-more">
-            {c.play.seeWorlds}
-          </a>
+          <div className="christmas-hero-overlay container-page">
+            <div className="christmas-hero-panel">
+              <div className="christmas-hero-copy">
+                <p className="w-fit rounded-full bg-[#fff2d3] px-3 py-1 text-xs font-medium text-[#203d32]">{c.hero.badge}</p>
+                <h1 className="mt-3 font-display text-4xl leading-[1.05] tracking-tight sm:text-5xl">
+                  {c.hero.title} <em className="text-accent">{c.hero.accent}</em>
+                </h1>
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">{c.hero.subtitle}</p>
+              </div>
+              <Generator />
+              <a href="#examples" className="christmas-hero-more">
+                {c.play.seeWorlds}
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 

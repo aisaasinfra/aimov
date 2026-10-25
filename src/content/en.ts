@@ -115,6 +115,7 @@ export function en(s: S) {
       wallBody: 'Every picture is a prepared 3D Christmas world. Use one, upload a photo, and create a holiday video in that scene.',
       use: 'Use this',
       selected: 'Selected',
+      selectedWorld: 'Selected world',
       seconds: (n: number) => `${n}s`,
       create: 'Create',
       choosePhoto: 'Choose photo',

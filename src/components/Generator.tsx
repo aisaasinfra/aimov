@@ -118,6 +118,13 @@ export function Generator() {
               {playCopy.create}
             </button>
           )}
+          <div className="play-selected-world" data-testid="selected-world" data-scene={play.template.id}>
+            <img src={play.template.thumb} alt="" />
+            <span className="min-w-0">
+              <span className="play-selected-kicker">{playCopy.selectedWorld}</span>
+              <span className="play-selected-name">{world.name}</span>
+            </span>
+          </div>
           <p className="text-center text-xs text-muted">
             {world.name} · {playCopy.seconds(duration.seconds)}
             {user ? ` · ${g.balance(user.credits)}` : ''}

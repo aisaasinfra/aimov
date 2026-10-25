@@ -19,3 +19,5 @@ playwright-report/
 !.claude/skills/sync-upstream/
 !.claude/skills/launch-audit/
 *.local.md
+# 本机截图，不进仓库
+_local-only/

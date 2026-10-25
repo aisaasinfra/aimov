@@ -1,9 +1,10 @@
 import { useRouterState } from '@tanstack/react-router'
 import { Plus, Upload } from 'lucide-react'
-import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { findVideoTemplate, site, type VideoTemplate } from '#/config/site'
 import { api, errorCode, isActiveGeneration, type Generation } from '#/lib/api'
 import { track } from '#/lib/attribution'
+import { COVERFLOW_RELEASE_PX, coverflowSwipeDelta } from '#/lib/coverflow-drag'
 import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
 import { playRequestPlan } from '#/lib/play-request'
 import { signInHref, useSession } from '#/lib/session'
@@ -289,21 +290,41 @@ function wrapOffset(index: number, selected: number, count: number) {
   return offset
 }
 
+function indexAt(base: number, delta: number, count: number) {
+  if (count <= 0) return 0
+  return ((base + delta) % count + count) % count
+}
+
 export function SceneCoverflow() {
   const play = usePlay()
   const c = useContent().play
   const templates = site.videoTemplates
   const selected = Math.max(0, templates.findIndex((item) => item.id === play.templateId))
   const copy = templateCopy(c.templates, play.template.id)
-  const drag = useRef<{ x: number; pointerId: number } | null>(null)
+  // 滑动没有产生 click 时这个标记会留下来，下一次按下先清掉，避免下一次点选被吞掉。
   const dragged = useRef(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const stopDrag = useRef<(() => void) | null>(null)
 
-  function step(delta: number) {
-    const next = templates[(selected + delta + templates.length) % templates.length]
+  useEffect(() => () => stopDrag.current?.(), [])
+
+  function selectAt(base: number, delta: number) {
+    const next = templates[indexAt(base, delta, templates.length)]
     if (!next) return
     play.selectTemplate(next.id, 'coverflow')
-    rootRef.current?.querySelector<HTMLButtonElement>(`[data-scene-id="${next.id}"]`)?.focus({ preventScroll: true })
+  }
+
+  function focusScene(id: string) {
+    requestAnimationFrame(() => {
+      rootRef.current?.querySelector<HTMLButtonElement>(`[data-scene-id="${id}"]`)?.focus({ preventScroll: true })
+    })
+  }
+
+  function step(delta: number) {
+    const next = templates[indexAt(selected, delta, templates.length)]
+    if (!next) return
+    play.selectTemplate(next.id, 'coverflow')
+    focusScene(next.id)
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -312,9 +333,54 @@ export function SceneCoverflow() {
     step(event.key === 'ArrowRight' ? 1 : -1)
   }
 
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    dragged.current = false
+    stopDrag.current?.()
+    const state = { x: event.clientX, pointerId: event.pointerId, base: selected, applied: 0 }
+    const end = (clientX: number) => {
+      stopDrag.current?.()
+      stopDrag.current = null
+      const dx = clientX - state.x
+      const delta = coverflowSwipeDelta(dx, 'release')
+      if (Math.abs(dx) >= COVERFLOW_RELEASE_PX) {
+        dragged.current = true
+        // 松手时指针可能已经滑到「生成」或别的按钮上，吞掉这一下 click，避免误触。
+        const swallow = (clickEvent: MouseEvent) => {
+          clickEvent.preventDefault()
+          clickEvent.stopPropagation()
+        }
+        window.addEventListener('click', swallow, true)
+        requestAnimationFrame(() => window.removeEventListener('click', swallow, true))
+      }
+      if (delta !== state.applied) selectAt(state.base, delta)
+    }
+    const move = (native: PointerEvent) => {
+      if (native.pointerId !== state.pointerId) return
+      const dx = native.clientX - state.x
+      if (Math.abs(dx) >= COVERFLOW_RELEASE_PX) dragged.current = true
+      const delta = coverflowSwipeDelta(dx, 'move')
+      if (delta === state.applied) return
+      state.applied = delta
+      selectAt(state.base, delta)
+    }
+    const up = (native: PointerEvent) => {
+      if (native.pointerId !== state.pointerId) return
+      end(native.clientX)
+    }
+    stopDrag.current = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
   const cards = templates
     .map((item, index) => ({ item, offset: wrapOffset(index, selected, templates.length) }))
-    .filter((card) => Math.abs(card.offset) <= 1)
+    .filter((card) => Math.abs(card.offset) <= 2)
     .sort((a, b) => Math.abs(b.offset) - Math.abs(a.offset))
 
   return (
@@ -327,24 +393,7 @@ export function SceneCoverflow() {
         role="region"
         aria-label={c.stripLabel}
         onKeyDown={onKeyDown}
-        onPointerDown={(event) => {
-          if (event.pointerType === 'mouse' && event.button !== 0) return
-          // A swipe that never produces a click used to leave this set, so the next tap was ignored.
-          dragged.current = false
-          drag.current = { x: event.clientX, pointerId: event.pointerId }
-        }}
-        onPointerUp={(event) => {
-          const start = drag.current
-          drag.current = null
-          if (!start || start.pointerId !== event.pointerId) return
-          const dx = event.clientX - start.x
-          if (Math.abs(dx) < 42) return
-          dragged.current = true
-          step(dx < 0 ? 1 : -1)
-        }}
-        onPointerCancel={() => {
-          drag.current = null
-        }}
+        onPointerDown={onPointerDown}
       >
         <div className="merry-coverflow-stage">
           {cards.map(({ item, offset }) => {
@@ -361,7 +410,7 @@ export function SceneCoverflow() {
                 data-selected={active ? 'true' : 'false'}
                 aria-pressed={active}
                 aria-label={itemCopy.name}
-                tabIndex={Math.abs(offset) > 1 ? -1 : 0}
+                tabIndex={offset === -2 ? -1 : 0}
                 onClick={() => {
                   if (dragged.current) {
                     dragged.current = false
@@ -382,14 +431,15 @@ export function SceneCoverflow() {
             )
           })}
         </div>
-      </div>
-      <div className="merry-coverflow-caption">
-        <div className="merry-coverflow-caption-inner">
-          <div className="min-w-0">
-            <p className="font-display text-xl leading-none md:text-2xl">{copy.name}</p>
-            <p className="mt-1 text-sm text-muted">{c.frameNote}</p>
+        <div className="merry-coverflow-fade" aria-hidden="true" />
+        <div className="merry-coverflow-caption">
+          <div className="merry-coverflow-caption-inner">
+            <div className="min-w-0">
+              <p className="font-display text-xl leading-none md:text-2xl">{copy.name}</p>
+              <p className="merry-coverflow-frame-note mt-1 text-sm text-muted">{c.frameNote}</p>
+            </div>
+            <p className="shrink-0 text-xs text-muted">{c.presetBadge}</p>
           </div>
-          <p className="shrink-0 text-xs text-muted">{c.presetBadge}</p>
         </div>
       </div>
     </div>
@@ -494,7 +544,7 @@ function PlayChrome() {
       {stickyVisible ? (
         <div role="region" aria-label={c.stickyCreate} data-testid="sticky-create" data-scene={play.template.id} className="play-sticky-bar">
           <div className="container-page play-sticky-bar-inner">
-            <span className="play-sticky-thumb">
+            <span className="play-sticky-thumb" data-testid="sticky-selected-world">
               <img src={play.template.thumb} alt="" />
             </span>
             <p className="play-sticky-title">{copy.name}</p>
