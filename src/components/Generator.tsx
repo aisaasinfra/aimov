@@ -87,6 +87,7 @@ export function Generator() {
             type="checkbox"
             checked={consent}
             onChange={(event) => play.setConsent(event.target.checked)}
+            id="consent"
             className="mt-0.5 size-4 shrink-0 accent-[#8b2d32]"
             data-testid="consent"
           />
