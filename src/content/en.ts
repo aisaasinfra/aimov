@@ -140,8 +140,8 @@ export function en(s: S) {
         colmar: { name: 'Colmar', blurb: 'Colorful houses and canal lights in the snow.' },
         tromso: { name: 'Tromsø', blurb: 'Polar night, wooden houses, and a green aurora.' },
         zermatt: { name: 'Zermatt', blurb: 'The Matterhorn, wooden chalets, and fresh snow.' },
-        ornament: { name: 'Snow-globe moment', blurb: 'A couple inside a glowing Christmas snow globe.' },
-        village: { name: 'Christmas village', blurb: 'A couple on a snowy cottage street.' },
+        ornament: { name: 'Snow Globe', blurb: 'A couple inside a glowing Christmas snow globe.' },
+        village: { name: 'Xmas Village', blurb: 'A couple on a snowy cottage street.' },
       } as Record<string, { name: string; blurb: string }>,
     },
     madeWith: {
