@@ -692,8 +692,9 @@ body[data-play-chrome] [data-support-fab] {
     display: none;
   }
 
+  /* 舞台随主海报等比收缩，只保留上下各 0.25rem，避免铭牌上方积累空白。 */
   .merry-coverflow-stage {
-    height: 12rem;
+    height: calc(min(34vw, 7.35rem) * 4 / 3 + 0.5rem);
   }
 
   .merry-coverflow-card {
@@ -701,7 +702,7 @@ body[data-play-chrome] [data-support-fab] {
   }
 
   .merry-coverflow-caption {
-    padding: 0.35rem 0.75rem 0.1rem;
+    padding: 0.125rem 0.75rem 0.1rem;
   }
 
   .play-studio-photo {

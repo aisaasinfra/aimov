@@ -1,5 +1,7 @@
 # ShrimpReel
 
+移动端封面流舞台随主海报高度收缩，雪橇铭牌贴近海报下沿并保留少量呼吸空间。
+
 The Coverflow caption uses a transparent illustrated sleigh nameplate with a dynamic localized world name.
 
 English | [简体中文](README.zh-CN.md)
