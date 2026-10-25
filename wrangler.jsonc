@@ -17,7 +17,7 @@
     "SITE_URL": "http://localhost:3000",
     // waffo | paypal | dodo | stripe | mock（mock 只允许非 production）。产品默认通道是 Waffo + PayPal.cn。
     "PAYMENT_PROVIDER": "mock",
-    // fal | yir | mock（mock 只允许非 production）
+    // fal | yir | nanoapi | mock（mock 只允许非 production；本地默认 mock，不需要 NANOAPI_API_KEY）
     "VIDEO_PROVIDER": "mock",
     // 管理员邮箱（逗号分隔）：登录即为管理员，同时接收举报、留言提醒和系统告警
     "ADMIN_EMAILS": "admin@example.com",
