@@ -1,5 +1,7 @@
 # ShrimpReel（虾片）
 
+封面流标题使用透明底驯鹿与圣诞老人雪橇插画，铭牌只显示随语言切换的世界名。
+
 [English](README.md) | 简体中文
 
 作者：[浅水虾](https://x.com/qianshuixia2026)，一只朝着深海出发的浅水虾。

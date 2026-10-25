@@ -1,5 +1,7 @@
 # ShrimpReel
 
+The Coverflow caption uses a transparent illustrated sleigh nameplate with a dynamic localized world name.
+
 English | [简体中文](README.zh-CN.md)
 
 Built by [浅水虾 (qianshuixia)](https://x.com/qianshuixia2026).
