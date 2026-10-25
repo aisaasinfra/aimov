@@ -10,6 +10,9 @@ import { backupDatabase } from './backup'
 import { classifyTouch, deviceFromUserAgent, requestAttribution, sanitizeTouch } from './attribution'
 import { deletedEmailHash, endSession, loadSessionUser, publicUser, startSession, upsertUser } from './auth'
 import { CLIENT_ERROR_PATH, summarizeClientError } from './client-error'
+import { registerFeedbackRoutes } from './feedback'
+import { reportWorkerError } from './sentry'
+import { registerWaitlistRoutes } from './waitlist'
 import { clawbackStatements, expireStatements, ledgerStatements } from './credits'
 import { CSP_REPORT_PATH, summarizeCspReports } from './csp'
 import { exchangeGoogleCode, googleAuthRedirect, googleClientId, googleOAuthConfig, verifyGoogleIdToken } from './google'
@@ -52,12 +55,26 @@ const MAX_ACTIVE_JOBS_PER_USER = 3
 
 export const app = new Hono<AppContext>()
 
+// app.request（单测）没有 executionCtx，Hono 的 getter 会抛错而不是返回 undefined。
+// DSN 为空时 reportWorkerError 立刻返回。
+function reportLater(c: { env: Env; executionCtx?: { waitUntil?: (promise: Promise<unknown>) => void }; req: { method: string; path: string } }, error: unknown, kind: string) {
+  const task = reportWorkerError(c.env, error, { method: c.req.method, path: c.req.path, kind })
+  try {
+    const waitUntil = c.executionCtx?.waitUntil
+    if (typeof waitUntil === 'function') waitUntil.call(c.executionCtx, task)
+    else void task
+  } catch {
+    void task
+  }
+}
+
 app.onError((error, c) => {
   if (error instanceof ApiError) {
     const status = error.status as ContentfulStatusCode
     // 5xx 的 message 可能带配置或支付商细节：写日志，只回给管理员（后台据此显示退款被拒的原因），其他人只拿到错误码
     if (error.status >= 500) {
       console.error(`[api] ${c.req.method} ${c.req.path} ${error.code}: ${error.message}`)
+      reportLater(c, error, 'api')
       if (c.get('user')?.role !== 'admin') return c.json({ error: error.code }, status)
     }
     return c.json({ error: error.code, message: error.message }, status)
@@ -67,6 +84,7 @@ app.onError((error, c) => {
     return c.json({ error: 'invalid_webhook' }, 401)
   }
   console.error(error)
+  reportLater(c, error, 'api')
   return c.json({ error: 'internal_error' }, 500)
 })
 
@@ -104,7 +122,10 @@ app.post(CLIENT_ERROR_PATH, async (c) => {
   const size = Number(c.req.header('content-length'))
   if (allowed && size > 0 && size <= 8_192) {
     const line = summarizeClientError(await c.req.text())
-    if (line) console.error('[client-error]', line)
+    if (line) {
+      console.error('[client-error]', line)
+      reportLater(c, new Error(line), 'client')
+    }
   }
   return c.body(null, 204)
 })
@@ -834,7 +855,10 @@ for (const provider of ['fal', 'yir', 'nanoapi']) {
   })
 }
 
-// ---------- Contact & account ----------
+// ---------- Contact, waitlist, feedback & account ----------
+
+registerWaitlistRoutes(app)
+registerFeedbackRoutes(app)
 
 app.post('/api/contact', async (c) => {
   const ip = c.req.header('cf-connecting-ip')
@@ -898,6 +922,7 @@ app.delete('/api/account', async (c) => {
     db.prepare('DELETE FROM generations WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM uploads WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM email_outbox WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM feedback WHERE user_id = ?').bind(user.id),
     ...clawbackStatements(db, {
       userId: user.id,
       maxAmount: 1_000_000_000, // 全部剩余积分

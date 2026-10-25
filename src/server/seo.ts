@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { ARTICLES, DEFAULT_LOCALE, LOCALES, localePath, site } from '#/config/site'
+import { latestChangelogDate } from '#/content/changelog'
 import { absoluteUrl } from '#/lib/i18n'
+import { buildDocMarkdown, buildLlmsFullTxt, buildLlmsTxt, llmRobotsLines } from './llms'
 import type { AppContext } from './types'
 import { isIndexable } from './util'
 
@@ -11,19 +13,27 @@ const INDEXNOW_PATH = site.seo.indexNowKey ? `/${site.seo.indexNowKey}.txt` : nu
 
 // server.ts 用它决定交给 Hono 还是 TanStack
 export function isSeoPath(pathname: string) {
-  return pathname === '/sitemap.xml' || pathname === '/robots.txt' || pathname === INDEXNOW_PATH
+  return (
+    pathname === '/sitemap.xml' ||
+    pathname === '/robots.txt' ||
+    pathname === '/llms.txt' ||
+    pathname === '/llms-full.txt' ||
+    pathname.startsWith('/docs-md/') ||
+    pathname === INDEXNOW_PATH
+  )
 }
 
 const ARTICLE_PATHS = ARTICLES.map((article) => `/${article.slug}`)
 
 // 可被索引的公开页面（账户、结账、后台页都带 noindex，不进 sitemap）
-export const PUBLIC_PATHS = ['/', '/pricing', '/guides', '/contact', '/report', '/privacy-policy', '/terms-of-service', '/refund-policy', ...ARTICLE_PATHS]
+export const PUBLIC_PATHS = ['/', '/pricing', '/guides', '/changelog', '/waitlist', '/contact', '/report', '/privacy-policy', '/terms-of-service', '/refund-policy', ...ARTICLE_PATHS]
 
 // lastmod 按页面取：文章用各自的 updatedAt，/guides 随最新文章变化，其余页面用 site.seo.updatedAt
 function lastModified(path: string) {
   const article = ARTICLES.find((a) => `/${a.slug}` === path)
   if (article) return article.updatedAt
   if (path === '/guides') return [site.seo.updatedAt, ...ARTICLES.map((a) => a.updatedAt)].sort().at(-1)!
+  if (path === '/changelog') return latestChangelogDate() ?? site.seo.updatedAt
   return site.seo.updatedAt
 }
 
@@ -63,8 +73,19 @@ seoRoutes.get('/robots.txt', (c) => {
         'Disallow: /admin',
         ...LOCALES.map((locale) => `Disallow: ${localePath(locale, '/checkout/')}`),
         '',
+        ...llmRobotsLines(),
         `Sitemap: ${absoluteUrl('/sitemap.xml')}`,
       ].join('\n')
     : ['User-agent: *', 'Disallow: /'].join('\n')
   return c.text(`${body}\n`, 200, { 'Cache-Control': 'public, max-age=3600' })
+})
+
+const MARKDOWN = { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }
+
+seoRoutes.get('/llms.txt', (c) => c.body(buildLlmsTxt(PUBLIC_PATHS), 200, MARKDOWN))
+seoRoutes.get('/llms-full.txt', (c) => c.body(buildLlmsFullTxt(PUBLIC_PATHS), 200, MARKDOWN))
+seoRoutes.get('/docs-md/:slug', (c) => {
+  const text = buildDocMarkdown(c.req.param('slug'))
+  if (!text) return c.notFound()
+  return c.body(text, 200, MARKDOWN)
 })

@@ -42,7 +42,7 @@ test('中英文首页水合无报错，H1/标题与 SSR 一致', async ({ page }
     // 生成器里的登录按钮在会话加载后才出现，可作为"已水合"的信号
     await expect(page.getByTestId('generator-sign-up')).toBeVisible()
     await expect(page.locator('h1')).toHaveCount(1)
-    await expect(page.locator('h1')).toHaveText(content.hero.title)
+    await expect(page.locator('h1')).toHaveText(`${content.hero.title} ${content.hero.accent}`)
     await expect(page).toHaveTitle(content.meta.homeTitle)
     await expect(page.getByRole('heading', { level: 2, name: content.howTo.title })).toBeVisible()
     await expect(page.getByRole('heading', { level: 2, name: content.whatIs.title })).toBeVisible()

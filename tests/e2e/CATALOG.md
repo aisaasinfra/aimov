@@ -269,6 +269,9 @@ e2e 跑在本地 dev server 上，支付、视频、审核服务商都是 mock�
 - 成片下载：服务商返回的成片超过大小上限时不写 R2，没有 Content-Length 时边读边计数（`output-download.test.ts`）。
 - 运维：D1 导出的 SQL 转义与备份文件命名（`backup.test.ts`）；付款即时通知按 webhook 地址识别 Telegram、飞书、Discord，报错里不带地址（`chat-notify.test.ts`）。
 - 其他：告警阈值与时间桶（`alerts.test.ts`）、归因解析与 CSV 公式注入（`attribution.test.ts`）、归因 Cookie 在同意后才写入、拒绝时删除（`attribution-consent.test.ts`）、GA4 同意与撤回（`consent.test.ts`）、错误与 CSP 报告的脱敏（`client-error.test.ts`、`csp.test.ts`）。
+- 问答引擎文档：`llms.txt` / `llms-full.txt` / `/docs-md/*` 的正文和 robots 注释（`llms.test.ts`）、站内更新日志的语言和发布过滤（`changelog.test.ts`）。
+- 等待列表：邮箱、来源、CSV 公式注入、重复邮箱不建账号（`waitlist.test.ts`）。产品反馈：长度、open 上限、只能删自己的 open、状态回复、导出（`feedback.test.ts`）。
+- 可选错误上报：DSN 为空或指向内网时不发请求，正文去掉邮箱和 query，ApiError 只上报错误码（`sentry.test.ts`）。
 
 ## 未覆盖
 

@@ -17,21 +17,22 @@ https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
 > 状态：本地全流程可用（单元测试 + Playwright e2e），尚未作为正式站点部署。哪些已用真实服务验证、哪些还没有，见 [ROADMAP.md](ROADMAP.md)。
 
 - 前端/SSR：TanStack Start（React 19）+ Tailwind 4，`/` 英文、`/zh` 中文
-- API：Hono（`/api/*`、`/media/*`、`/sitemap.xml`、`/robots.txt`、IndexNow key 文件），入口 `src/server.ts`
+- API：Hono（`/api/*`、`/media/*`、`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/llms-full.txt`、`/docs-md/*`、IndexNow key 文件），入口 `src/server.ts`
 - 支付：Waffo Pancake（默认）、Dodo Payments，均为 MoR；也可用 Stripe（你自己是商户，销售税自己处理）；`mock` 仅用于本地和 e2e
 - 视频：fal.ai queue API（默认），可选 [yir.ai](https://yir.ai/?ref=qianshuixia) 网关或 [NanoAPI](https://nanoapi.ai)；`mock` 仅用于本地和 e2e。见下文“视频服务商”
 - 已具备：
   - 用户与积分：Google 登录（含 One Tap）、积分包、月付和年付订阅、积分流水、个人中心（视频/账单/设置/兑换码/邀请链接/注销/导出我的数据）；账单显示实付与退款，订单和积分流水可分页加载，每笔订单有可打印的详情页（税务发票由支付商出具）
   - 订单与生成：订单与部分/全额退款回收、生成任务队列（含死信队列）与失败退积分
   - 增长与运营：来源归因（UTM 与广告点击 ID，首次和最近触达）、访问 → 注册 → 下单 → 支付 → 生成漏斗、GA4 事件（带同意横幅）、成片公开分享页（用户自己开启，带链接预览图）
-  - 管理后台：概览（含服务商成本与毛利）、用户、订单、生成、举报下架、留言、支付事件、邮件、审计、经营报表与订单 CSV、兑换码、邀请排行、运营设置与测试连接
+  - 管理后台：概览（含服务商成本与毛利）、用户、订单、生成、举报下架、留言、等待列表 CSV、产品反馈、支付事件、邮件、审计、经营报表与订单 CSV、兑换码、邀请排行、运营设置与测试连接
     - 用户：按状态、角色、是否付费筛选，按注册时间、最近登录、积分排序；详情页有累计付款、生成统计、订单、积分批次与流水和针对该用户的管理员操作（补发可设有效期）
     - 订单：按订单号、邮箱、支付商流水号搜索；详情页把支付回调、积分变动、管理员操作和邮件合成一条时间线，可在详情页退款、查单或补单
     - 生成：按任务 ID、邮箱、服务商请求 ID 搜索
   - 交易邮件：积分到账、成片完成、生成失败退积分、举报回执（仅登录用户）与处理结果；管理员收新举报、超时提醒和新留言（Cloudflare Email Service，发件箱去重与重试）
   - 合规与内容安全：成片 AI 标识；照片 7 天、成片 30 天自动清理；举报下架（48 小时队列，同一张原图的全部成片一并删除并拉黑）；上传图片审核；联系和举报表单的 Turnstile 人机验证
-  - 运维与安全：后台免部署切换维护模式、全站公告和每日生成上限；健康检查告警邮件、付款即时通知（Telegram、飞书、Discord 等）、D1 每日备份到 R2、前端错误上报到 Workers 日志、CSP（Report-Only，每次请求一个 nonce）与 Permissions-Policy
-  - 内容与 SEO：one-page 首页（How it works / What is 区块，可选的痛点和“自己拍 vs 用本站”对比区块）、可扩展的文章集合（`/guides` 列表页、相关文章）、法律页、联系表单；SSR 输出完整的 canonical、hreflang、JSON-LD 和 sitemap；文案按语言拆包；`npm run seo:check` 检查全站
+  - 运维与安全：后台免部署切换维护模式、全站公告和每日生成上限；健康检查告警邮件、付款即时通知（Telegram、飞书、Discord 等）、D1 每日备份到 R2、前端错误上报到 Workers 日志、可选的 Sentry 兼容错误上报（`SENTRY_DSN`，留空即关）、CSP（Report-Only，每次请求一个 nonce）与 Permissions-Policy
+  - 内容与 SEO：one-page 首页（How it works / What is 区块，可选的痛点和“自己拍 vs 用本站”对比区块）、可扩展的文章集合（`/guides` 列表页、相关文章）、法律页、联系表单、公开等待列表、站内更新日志（`/changelog`，中英文）；SSR 输出完整的 canonical、hreflang、JSON-LD 和 sitemap；给问答引擎的 `llms.txt`；文案按语言拆包；`npm run seo:check` 检查全站
+  - 登录后的产品反馈（`/dashboard/feedback`），后台状态为待处理 / 已计划 / 已上线 / 已关闭。和联系表单、举报下架分开。登录仍只有 Google。
 
 更新日志见 [CHANGELOG.md](CHANGELOG.md)。功能建议与后续规划见 [docs/SAAS_VIDEO_FEATURES.md](docs/SAAS_VIDEO_FEATURES.md) 和 [ROADMAP.md](ROADMAP.md)。SEO 规则、关键词规划和审计结果见 [docs/SEO_AUDIT.md](docs/SEO_AUDIT.md)。全部环境变量和 `site.ts` 上线字段见 [docs/env.md](docs/env.md)，新增支付商的步骤与 webhook 返回码约定见 [docs/payments.md](docs/payments.md)，订阅的开关、套餐和支付商配置见 [docs/subscriptions.md](docs/subscriptions.md)，改代码前的约定（积分、支付入账、双语文案、迁移、e2e）见 [AGENTS.md](AGENTS.md)。
 

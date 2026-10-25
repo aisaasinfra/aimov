@@ -1,5 +1,5 @@
-// 前端错误上报：浏览器里未捕获的异常、未处理的 Promise 拒绝和错误页（lib/error-report.ts）发到这里，只写 Worker 日志（[client-error]），不落库。
-// 用户反馈时按错误页上的编号在 Workers Logs 里搜 id=xxx 即可。要接 Sentry 之类的平台，替换 lib/error-report.ts 的发送部分
+// 前端错误上报：浏览器里未捕获的异常、未处理的 Promise 拒绝和错误页（lib/error-report.ts）发到这里，先写 Worker 日志（[client-error]），不落库。
+// 用户反馈时按错误页上的编号在 Workers Logs 里搜 id=xxx 即可。配了 SENTRY_DSN 时，同一条摘要再转发到 Sentry 兼容的 envelope（server/sentry.ts）；DSN 为空则不发。
 import { stripUrl } from './csp'
 
 export const CLIENT_ERROR_PATH = '/api/client-error'

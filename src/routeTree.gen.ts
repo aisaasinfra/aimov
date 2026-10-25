@@ -15,6 +15,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AdminEmailsRouteImport } from './routes/admin/emails'
 import { Route as AdminEventsRouteImport } from './routes/admin/events'
+import { Route as AdminFeedbackRouteImport } from './routes/admin/feedback'
 import { Route as AdminGenerationsRouteImport } from './routes/admin/generations'
 import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
 import { Route as AdminRedeemCodesRouteImport } from './routes/admin/redeem-codes'
@@ -22,8 +23,10 @@ import { Route as AdminReferralsRouteImport } from './routes/admin/referrals'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminTakedownsRouteImport } from './routes/admin/takedowns'
+import { Route as AdminWaitlistRouteImport } from './routes/admin/waitlist'
 import { Route as Char123LocaleChar125IndexRouteImport } from './routes/{-$locale}/index'
 import { Route as Char123LocaleChar125SlugRouteImport } from './routes/{-$locale}/$slug'
+import { Route as Char123LocaleChar125ChangelogRouteImport } from './routes/{-$locale}/changelog'
 import { Route as Char123LocaleChar125ContactRouteImport } from './routes/{-$locale}/contact'
 import { Route as Char123LocaleChar125DashboardRouteRouteImport } from './routes/{-$locale}/dashboard/route'
 import { Route as Char123LocaleChar125GuidesRouteImport } from './routes/{-$locale}/guides'
@@ -33,6 +36,7 @@ import { Route as Char123LocaleChar125RefundPolicyRouteImport } from './routes/{
 import { Route as Char123LocaleChar125ReportRouteImport } from './routes/{-$locale}/report'
 import { Route as Char123LocaleChar125SignInRouteImport } from './routes/{-$locale}/sign-in'
 import { Route as Char123LocaleChar125TermsOfServiceRouteImport } from './routes/{-$locale}/terms-of-service'
+import { Route as Char123LocaleChar125WaitlistRouteImport } from './routes/{-$locale}/waitlist'
 import { Route as AdminOrdersIndexRouteImport } from './routes/admin/orders.index'
 import { Route as AdminOrdersIdRouteImport } from './routes/admin/orders.$id'
 import { Route as AdminUsersIndexRouteImport } from './routes/admin/users.index'
@@ -41,6 +45,7 @@ import { Route as Char123LocaleChar125CheckoutMockRouteImport } from './routes/{
 import { Route as Char123LocaleChar125CheckoutSuccessRouteImport } from './routes/{-$locale}/checkout/success'
 import { Route as Char123LocaleChar125DashboardIndexRouteImport } from './routes/{-$locale}/dashboard/index'
 import { Route as Char123LocaleChar125DashboardBillingRouteImport } from './routes/{-$locale}/dashboard/billing'
+import { Route as Char123LocaleChar125DashboardFeedbackRouteImport } from './routes/{-$locale}/dashboard/feedback'
 import { Route as Char123LocaleChar125DashboardSettingsRouteImport } from './routes/{-$locale}/dashboard/settings'
 import { Route as Char123LocaleChar125VShareIdRouteImport } from './routes/{-$locale}/v.$shareId'
 import { Route as Char123LocaleChar125DashboardOrdersIdRouteImport } from './routes/{-$locale}/dashboard/orders.$id'
@@ -74,6 +79,11 @@ const AdminEmailsRoute = AdminEmailsRouteImport.update({
 const AdminEventsRoute = AdminEventsRouteImport.update({
   id: '/events',
   path: '/events',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminFeedbackRoute = AdminFeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminGenerationsRoute = AdminGenerationsRouteImport.update({
@@ -111,6 +121,11 @@ const AdminTakedownsRoute = AdminTakedownsRouteImport.update({
   path: '/takedowns',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminWaitlistRoute = AdminWaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const Char123LocaleChar125IndexRoute =
   Char123LocaleChar125IndexRouteImport.update({
     id: '/',
@@ -121,6 +136,12 @@ const Char123LocaleChar125SlugRoute =
   Char123LocaleChar125SlugRouteImport.update({
     id: '/$slug',
     path: '/$slug',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
+const Char123LocaleChar125ChangelogRoute =
+  Char123LocaleChar125ChangelogRouteImport.update({
+    id: '/changelog',
+    path: '/changelog',
     getParentRoute: () => Char123LocaleChar125RouteRoute,
   } as any)
 const Char123LocaleChar125ContactRoute =
@@ -177,6 +198,12 @@ const Char123LocaleChar125TermsOfServiceRoute =
     path: '/terms-of-service',
     getParentRoute: () => Char123LocaleChar125RouteRoute,
   } as any)
+const Char123LocaleChar125WaitlistRoute =
+  Char123LocaleChar125WaitlistRouteImport.update({
+    id: '/waitlist',
+    path: '/waitlist',
+    getParentRoute: () => Char123LocaleChar125RouteRoute,
+  } as any)
 const AdminOrdersIndexRoute = AdminOrdersIndexRouteImport.update({
   id: '/orders/',
   path: '/orders/',
@@ -221,6 +248,12 @@ const Char123LocaleChar125DashboardBillingRoute =
     path: '/billing',
     getParentRoute: () => Char123LocaleChar125DashboardRouteRoute,
   } as any)
+const Char123LocaleChar125DashboardFeedbackRoute =
+  Char123LocaleChar125DashboardFeedbackRouteImport.update({
+    id: '/feedback',
+    path: '/feedback',
+    getParentRoute: () => Char123LocaleChar125DashboardRouteRoute,
+  } as any)
 const Char123LocaleChar125DashboardSettingsRoute =
   Char123LocaleChar125DashboardSettingsRouteImport.update({
     id: '/settings',
@@ -247,6 +280,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/emails': typeof AdminEmailsRoute
   '/admin/events': typeof AdminEventsRoute
+  '/admin/feedback': typeof AdminFeedbackRoute
   '/admin/generations': typeof AdminGenerationsRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/redeem-codes': typeof AdminRedeemCodesRoute
@@ -254,7 +288,9 @@ export interface FileRoutesByFullPath {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/takedowns': typeof AdminTakedownsRoute
+  '/admin/waitlist': typeof AdminWaitlistRoute
   '/{-$locale}/$slug': typeof Char123LocaleChar125SlugRoute
+  '/{-$locale}/changelog': typeof Char123LocaleChar125ChangelogRoute
   '/{-$locale}/contact': typeof Char123LocaleChar125ContactRoute
   '/{-$locale}/guides': typeof Char123LocaleChar125GuidesRoute
   '/{-$locale}/pricing': typeof Char123LocaleChar125PricingRoute
@@ -263,6 +299,7 @@ export interface FileRoutesByFullPath {
   '/{-$locale}/report': typeof Char123LocaleChar125ReportRoute
   '/{-$locale}/sign-in': typeof Char123LocaleChar125SignInRoute
   '/{-$locale}/terms-of-service': typeof Char123LocaleChar125TermsOfServiceRoute
+  '/{-$locale}/waitlist': typeof Char123LocaleChar125WaitlistRoute
   '/admin/': typeof AdminIndexRoute
   '/{-$locale}/': typeof Char123LocaleChar125IndexRoute
   '/admin/orders/$id': typeof AdminOrdersIdRoute
@@ -270,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/{-$locale}/checkout/mock': typeof Char123LocaleChar125CheckoutMockRoute
   '/{-$locale}/checkout/success': typeof Char123LocaleChar125CheckoutSuccessRoute
   '/{-$locale}/dashboard/billing': typeof Char123LocaleChar125DashboardBillingRoute
+  '/{-$locale}/dashboard/feedback': typeof Char123LocaleChar125DashboardFeedbackRoute
   '/{-$locale}/dashboard/settings': typeof Char123LocaleChar125DashboardSettingsRoute
   '/{-$locale}/v/$shareId': typeof Char123LocaleChar125VShareIdRoute
   '/admin/orders/': typeof AdminOrdersIndexRoute
@@ -281,6 +319,7 @@ export interface FileRoutesByTo {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/emails': typeof AdminEmailsRoute
   '/admin/events': typeof AdminEventsRoute
+  '/admin/feedback': typeof AdminFeedbackRoute
   '/admin/generations': typeof AdminGenerationsRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/redeem-codes': typeof AdminRedeemCodesRoute
@@ -288,7 +327,9 @@ export interface FileRoutesByTo {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/takedowns': typeof AdminTakedownsRoute
+  '/admin/waitlist': typeof AdminWaitlistRoute
   '/{-$locale}/$slug': typeof Char123LocaleChar125SlugRoute
+  '/{-$locale}/changelog': typeof Char123LocaleChar125ChangelogRoute
   '/{-$locale}/contact': typeof Char123LocaleChar125ContactRoute
   '/{-$locale}/guides': typeof Char123LocaleChar125GuidesRoute
   '/{-$locale}/pricing': typeof Char123LocaleChar125PricingRoute
@@ -297,6 +338,7 @@ export interface FileRoutesByTo {
   '/{-$locale}/report': typeof Char123LocaleChar125ReportRoute
   '/{-$locale}/sign-in': typeof Char123LocaleChar125SignInRoute
   '/{-$locale}/terms-of-service': typeof Char123LocaleChar125TermsOfServiceRoute
+  '/{-$locale}/waitlist': typeof Char123LocaleChar125WaitlistRoute
   '/admin': typeof AdminIndexRoute
   '/{-$locale}': typeof Char123LocaleChar125IndexRoute
   '/admin/orders/$id': typeof AdminOrdersIdRoute
@@ -304,6 +346,7 @@ export interface FileRoutesByTo {
   '/{-$locale}/checkout/mock': typeof Char123LocaleChar125CheckoutMockRoute
   '/{-$locale}/checkout/success': typeof Char123LocaleChar125CheckoutSuccessRoute
   '/{-$locale}/dashboard/billing': typeof Char123LocaleChar125DashboardBillingRoute
+  '/{-$locale}/dashboard/feedback': typeof Char123LocaleChar125DashboardFeedbackRoute
   '/{-$locale}/dashboard/settings': typeof Char123LocaleChar125DashboardSettingsRoute
   '/{-$locale}/v/$shareId': typeof Char123LocaleChar125VShareIdRoute
   '/admin/orders': typeof AdminOrdersIndexRoute
@@ -319,6 +362,7 @@ export interface FileRoutesById {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/emails': typeof AdminEmailsRoute
   '/admin/events': typeof AdminEventsRoute
+  '/admin/feedback': typeof AdminFeedbackRoute
   '/admin/generations': typeof AdminGenerationsRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/redeem-codes': typeof AdminRedeemCodesRoute
@@ -326,7 +370,9 @@ export interface FileRoutesById {
   '/admin/reports': typeof AdminReportsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/takedowns': typeof AdminTakedownsRoute
+  '/admin/waitlist': typeof AdminWaitlistRoute
   '/{-$locale}/$slug': typeof Char123LocaleChar125SlugRoute
+  '/{-$locale}/changelog': typeof Char123LocaleChar125ChangelogRoute
   '/{-$locale}/contact': typeof Char123LocaleChar125ContactRoute
   '/{-$locale}/guides': typeof Char123LocaleChar125GuidesRoute
   '/{-$locale}/pricing': typeof Char123LocaleChar125PricingRoute
@@ -335,6 +381,7 @@ export interface FileRoutesById {
   '/{-$locale}/report': typeof Char123LocaleChar125ReportRoute
   '/{-$locale}/sign-in': typeof Char123LocaleChar125SignInRoute
   '/{-$locale}/terms-of-service': typeof Char123LocaleChar125TermsOfServiceRoute
+  '/{-$locale}/waitlist': typeof Char123LocaleChar125WaitlistRoute
   '/admin/': typeof AdminIndexRoute
   '/{-$locale}/': typeof Char123LocaleChar125IndexRoute
   '/admin/orders/$id': typeof AdminOrdersIdRoute
@@ -342,6 +389,7 @@ export interface FileRoutesById {
   '/{-$locale}/checkout/mock': typeof Char123LocaleChar125CheckoutMockRoute
   '/{-$locale}/checkout/success': typeof Char123LocaleChar125CheckoutSuccessRoute
   '/{-$locale}/dashboard/billing': typeof Char123LocaleChar125DashboardBillingRoute
+  '/{-$locale}/dashboard/feedback': typeof Char123LocaleChar125DashboardFeedbackRoute
   '/{-$locale}/dashboard/settings': typeof Char123LocaleChar125DashboardSettingsRoute
   '/{-$locale}/v/$shareId': typeof Char123LocaleChar125VShareIdRoute
   '/admin/orders/': typeof AdminOrdersIndexRoute
@@ -358,6 +406,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/emails'
     | '/admin/events'
+    | '/admin/feedback'
     | '/admin/generations'
     | '/admin/messages'
     | '/admin/redeem-codes'
@@ -365,7 +414,9 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/takedowns'
+    | '/admin/waitlist'
     | '/{-$locale}/$slug'
+    | '/{-$locale}/changelog'
     | '/{-$locale}/contact'
     | '/{-$locale}/guides'
     | '/{-$locale}/pricing'
@@ -374,6 +425,7 @@ export interface FileRouteTypes {
     | '/{-$locale}/report'
     | '/{-$locale}/sign-in'
     | '/{-$locale}/terms-of-service'
+    | '/{-$locale}/waitlist'
     | '/admin/'
     | '/{-$locale}/'
     | '/admin/orders/$id'
@@ -381,6 +433,7 @@ export interface FileRouteTypes {
     | '/{-$locale}/checkout/mock'
     | '/{-$locale}/checkout/success'
     | '/{-$locale}/dashboard/billing'
+    | '/{-$locale}/dashboard/feedback'
     | '/{-$locale}/dashboard/settings'
     | '/{-$locale}/v/$shareId'
     | '/admin/orders/'
@@ -392,6 +445,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/emails'
     | '/admin/events'
+    | '/admin/feedback'
     | '/admin/generations'
     | '/admin/messages'
     | '/admin/redeem-codes'
@@ -399,7 +453,9 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/takedowns'
+    | '/admin/waitlist'
     | '/{-$locale}/$slug'
+    | '/{-$locale}/changelog'
     | '/{-$locale}/contact'
     | '/{-$locale}/guides'
     | '/{-$locale}/pricing'
@@ -408,6 +464,7 @@ export interface FileRouteTypes {
     | '/{-$locale}/report'
     | '/{-$locale}/sign-in'
     | '/{-$locale}/terms-of-service'
+    | '/{-$locale}/waitlist'
     | '/admin'
     | '/{-$locale}'
     | '/admin/orders/$id'
@@ -415,6 +472,7 @@ export interface FileRouteTypes {
     | '/{-$locale}/checkout/mock'
     | '/{-$locale}/checkout/success'
     | '/{-$locale}/dashboard/billing'
+    | '/{-$locale}/dashboard/feedback'
     | '/{-$locale}/dashboard/settings'
     | '/{-$locale}/v/$shareId'
     | '/admin/orders'
@@ -429,6 +487,7 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/emails'
     | '/admin/events'
+    | '/admin/feedback'
     | '/admin/generations'
     | '/admin/messages'
     | '/admin/redeem-codes'
@@ -436,7 +495,9 @@ export interface FileRouteTypes {
     | '/admin/reports'
     | '/admin/settings'
     | '/admin/takedowns'
+    | '/admin/waitlist'
     | '/{-$locale}/$slug'
+    | '/{-$locale}/changelog'
     | '/{-$locale}/contact'
     | '/{-$locale}/guides'
     | '/{-$locale}/pricing'
@@ -445,6 +506,7 @@ export interface FileRouteTypes {
     | '/{-$locale}/report'
     | '/{-$locale}/sign-in'
     | '/{-$locale}/terms-of-service'
+    | '/{-$locale}/waitlist'
     | '/admin/'
     | '/{-$locale}/'
     | '/admin/orders/$id'
@@ -452,6 +514,7 @@ export interface FileRouteTypes {
     | '/{-$locale}/checkout/mock'
     | '/{-$locale}/checkout/success'
     | '/{-$locale}/dashboard/billing'
+    | '/{-$locale}/dashboard/feedback'
     | '/{-$locale}/dashboard/settings'
     | '/{-$locale}/v/$shareId'
     | '/admin/orders/'
@@ -509,6 +572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminEventsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/feedback': {
+      id: '/admin/feedback'
+      path: '/feedback'
+      fullPath: '/admin/feedback'
+      preLoaderRoute: typeof AdminFeedbackRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/generations': {
       id: '/admin/generations'
       path: '/generations'
@@ -558,6 +628,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTakedownsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/waitlist': {
+      id: '/admin/waitlist'
+      path: '/waitlist'
+      fullPath: '/admin/waitlist'
+      preLoaderRoute: typeof AdminWaitlistRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/{-$locale}/': {
       id: '/{-$locale}/'
       path: '/'
@@ -570,6 +647,13 @@ declare module '@tanstack/react-router' {
       path: '/$slug'
       fullPath: '/{-$locale}/$slug'
       preLoaderRoute: typeof Char123LocaleChar125SlugRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
+    '/{-$locale}/changelog': {
+      id: '/{-$locale}/changelog'
+      path: '/changelog'
+      fullPath: '/{-$locale}/changelog'
+      preLoaderRoute: typeof Char123LocaleChar125ChangelogRouteImport
       parentRoute: typeof Char123LocaleChar125RouteRoute
     }
     '/{-$locale}/contact': {
@@ -635,6 +719,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char123LocaleChar125TermsOfServiceRouteImport
       parentRoute: typeof Char123LocaleChar125RouteRoute
     }
+    '/{-$locale}/waitlist': {
+      id: '/{-$locale}/waitlist'
+      path: '/waitlist'
+      fullPath: '/{-$locale}/waitlist'
+      preLoaderRoute: typeof Char123LocaleChar125WaitlistRouteImport
+      parentRoute: typeof Char123LocaleChar125RouteRoute
+    }
     '/admin/orders/': {
       id: '/admin/orders/'
       path: '/orders'
@@ -691,6 +782,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char123LocaleChar125DashboardBillingRouteImport
       parentRoute: typeof Char123LocaleChar125DashboardRouteRoute
     }
+    '/{-$locale}/dashboard/feedback': {
+      id: '/{-$locale}/dashboard/feedback'
+      path: '/feedback'
+      fullPath: '/{-$locale}/dashboard/feedback'
+      preLoaderRoute: typeof Char123LocaleChar125DashboardFeedbackRouteImport
+      parentRoute: typeof Char123LocaleChar125DashboardRouteRoute
+    }
     '/{-$locale}/dashboard/settings': {
       id: '/{-$locale}/dashboard/settings'
       path: '/settings'
@@ -719,6 +817,7 @@ interface AdminRouteRouteChildren {
   AdminAuditRoute: typeof AdminAuditRoute
   AdminEmailsRoute: typeof AdminEmailsRoute
   AdminEventsRoute: typeof AdminEventsRoute
+  AdminFeedbackRoute: typeof AdminFeedbackRoute
   AdminGenerationsRoute: typeof AdminGenerationsRoute
   AdminMessagesRoute: typeof AdminMessagesRoute
   AdminRedeemCodesRoute: typeof AdminRedeemCodesRoute
@@ -726,6 +825,7 @@ interface AdminRouteRouteChildren {
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTakedownsRoute: typeof AdminTakedownsRoute
+  AdminWaitlistRoute: typeof AdminWaitlistRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminOrdersIdRoute: typeof AdminOrdersIdRoute
   AdminUsersIdRoute: typeof AdminUsersIdRoute
@@ -737,6 +837,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAuditRoute: AdminAuditRoute,
   AdminEmailsRoute: AdminEmailsRoute,
   AdminEventsRoute: AdminEventsRoute,
+  AdminFeedbackRoute: AdminFeedbackRoute,
   AdminGenerationsRoute: AdminGenerationsRoute,
   AdminMessagesRoute: AdminMessagesRoute,
   AdminRedeemCodesRoute: AdminRedeemCodesRoute,
@@ -744,6 +845,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminReportsRoute: AdminReportsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTakedownsRoute: AdminTakedownsRoute,
+  AdminWaitlistRoute: AdminWaitlistRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminOrdersIdRoute: AdminOrdersIdRoute,
   AdminUsersIdRoute: AdminUsersIdRoute,
@@ -757,6 +859,7 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface Char123LocaleChar125DashboardRouteRouteChildren {
   Char123LocaleChar125DashboardBillingRoute: typeof Char123LocaleChar125DashboardBillingRoute
+  Char123LocaleChar125DashboardFeedbackRoute: typeof Char123LocaleChar125DashboardFeedbackRoute
   Char123LocaleChar125DashboardSettingsRoute: typeof Char123LocaleChar125DashboardSettingsRoute
   Char123LocaleChar125DashboardIndexRoute: typeof Char123LocaleChar125DashboardIndexRoute
   Char123LocaleChar125DashboardOrdersIdRoute: typeof Char123LocaleChar125DashboardOrdersIdRoute
@@ -766,6 +869,8 @@ const Char123LocaleChar125DashboardRouteRouteChildren: Char123LocaleChar125Dashb
   {
     Char123LocaleChar125DashboardBillingRoute:
       Char123LocaleChar125DashboardBillingRoute,
+    Char123LocaleChar125DashboardFeedbackRoute:
+      Char123LocaleChar125DashboardFeedbackRoute,
     Char123LocaleChar125DashboardSettingsRoute:
       Char123LocaleChar125DashboardSettingsRoute,
     Char123LocaleChar125DashboardIndexRoute:
@@ -782,6 +887,7 @@ const Char123LocaleChar125DashboardRouteRouteWithChildren =
 interface Char123LocaleChar125RouteRouteChildren {
   Char123LocaleChar125DashboardRouteRoute: typeof Char123LocaleChar125DashboardRouteRouteWithChildren
   Char123LocaleChar125SlugRoute: typeof Char123LocaleChar125SlugRoute
+  Char123LocaleChar125ChangelogRoute: typeof Char123LocaleChar125ChangelogRoute
   Char123LocaleChar125ContactRoute: typeof Char123LocaleChar125ContactRoute
   Char123LocaleChar125GuidesRoute: typeof Char123LocaleChar125GuidesRoute
   Char123LocaleChar125PricingRoute: typeof Char123LocaleChar125PricingRoute
@@ -790,6 +896,7 @@ interface Char123LocaleChar125RouteRouteChildren {
   Char123LocaleChar125ReportRoute: typeof Char123LocaleChar125ReportRoute
   Char123LocaleChar125SignInRoute: typeof Char123LocaleChar125SignInRoute
   Char123LocaleChar125TermsOfServiceRoute: typeof Char123LocaleChar125TermsOfServiceRoute
+  Char123LocaleChar125WaitlistRoute: typeof Char123LocaleChar125WaitlistRoute
   Char123LocaleChar125IndexRoute: typeof Char123LocaleChar125IndexRoute
   Char123LocaleChar125CheckoutMockRoute: typeof Char123LocaleChar125CheckoutMockRoute
   Char123LocaleChar125CheckoutSuccessRoute: typeof Char123LocaleChar125CheckoutSuccessRoute
@@ -801,6 +908,7 @@ const Char123LocaleChar125RouteRouteChildren: Char123LocaleChar125RouteRouteChil
     Char123LocaleChar125DashboardRouteRoute:
       Char123LocaleChar125DashboardRouteRouteWithChildren,
     Char123LocaleChar125SlugRoute: Char123LocaleChar125SlugRoute,
+    Char123LocaleChar125ChangelogRoute: Char123LocaleChar125ChangelogRoute,
     Char123LocaleChar125ContactRoute: Char123LocaleChar125ContactRoute,
     Char123LocaleChar125GuidesRoute: Char123LocaleChar125GuidesRoute,
     Char123LocaleChar125PricingRoute: Char123LocaleChar125PricingRoute,
@@ -812,6 +920,7 @@ const Char123LocaleChar125RouteRouteChildren: Char123LocaleChar125RouteRouteChil
     Char123LocaleChar125SignInRoute: Char123LocaleChar125SignInRoute,
     Char123LocaleChar125TermsOfServiceRoute:
       Char123LocaleChar125TermsOfServiceRoute,
+    Char123LocaleChar125WaitlistRoute: Char123LocaleChar125WaitlistRoute,
     Char123LocaleChar125IndexRoute: Char123LocaleChar125IndexRoute,
     Char123LocaleChar125CheckoutMockRoute:
       Char123LocaleChar125CheckoutMockRoute,

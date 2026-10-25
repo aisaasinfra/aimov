@@ -70,8 +70,13 @@ describe('robots.txt', () => {
   const robots = async (APP_ENV: string) => (await seoRoutes.request('/robots.txt', {}, { APP_ENV } as unknown as Env)).text()
 
   it('只有 production 允许抓取，staging 与正式站内容相同，必须整体禁止', async () => {
-    expect(await robots('production')).toMatch(/^Allow: \/$/m)
+    const production = await robots('production')
+    expect(production).toMatch(/^Allow: \/$/m)
+    expect(production).toContain('# llms.txt:')
+    expect(production).toContain('/llms.txt')
+    expect(production).toContain('/llms-full.txt')
     expect(await robots('staging')).toMatch(/^Disallow: \/$/m)
+    expect(await robots('staging')).not.toContain('llms.txt')
     expect(await robots('development')).toMatch(/^Disallow: \/$/m)
   })
 })

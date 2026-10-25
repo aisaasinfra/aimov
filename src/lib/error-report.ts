@@ -1,5 +1,5 @@
-// 前端错误上报（服务端见 server/client-error.ts）：未捕获异常、未处理的 Promise 拒绝和错误页，用 sendBeacon 发给自己的 Worker，
-// 只进 Worker 日志。每条带一个随机编号，错误页把编号展示给用户，反馈时可以按编号在日志里找到堆栈
+// 前端错误上报（服务端见 server/client-error.ts）：未捕获异常、未处理的 Promise 拒绝和错误页，用 sendBeacon 发给自己的 Worker。
+// 服务端先写日志；SENTRY_DSN 非空时再转发。每条带一个随机编号，错误页把编号展示给用户，反馈时可以按编号在日志里找到堆栈。
 import { CLIENT_ERROR_PATH } from '#/server/client-error'
 
 // 同一页面最多报这么多条，同一个错误只报一次（循环里反复抛错不会刷爆日志和限流额度）

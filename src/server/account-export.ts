@@ -39,6 +39,8 @@ const QUERIES = {
     FROM generations WHERE user_id = ?1 ORDER BY created_at`,
   contactMessages: `SELECT id, email, topic, message, status, created_at AS createdAt
     FROM contact_messages WHERE user_id = ?1 ORDER BY created_at`,
+  feedback: `SELECT id, title, body, status, admin_note AS adminNote, created_at AS createdAt, updated_at AS updatedAt
+    FROM feedback WHERE user_id = ?1 ORDER BY created_at`,
   takedownRequests: `SELECT id, reporter_name AS reporterName, reporter_email AS reporterEmail, content_ref AS contentRef,
       reason, details, is_depicted AS isDepicted, status, resolution_note AS resolutionNote, created_at AS createdAt,
       resolved_at AS resolvedAt
