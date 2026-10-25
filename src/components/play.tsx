@@ -1,6 +1,7 @@
 import { useRouterState } from '@tanstack/react-router'
 import { Plus, Upload } from 'lucide-react'
 import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { CaptionNameplate } from '#/components/caption-sleigh'
 import { findVideoTemplate, site, type VideoTemplate } from '#/config/site'
 import { api, errorCode, isActiveGeneration, type Generation } from '#/lib/api'
 import { track } from '#/lib/attribution'
@@ -433,24 +434,7 @@ export function SceneCoverflow() {
         </div>
         <div className="merry-coverflow-fade" aria-hidden="true" />
         <div className="merry-coverflow-caption" data-testid="coverflow-caption">
-          <div className="merry-coverflow-caption-inner">
-            <svg className="merry-caption-sprig" viewBox="0 0 32 32" aria-hidden="true">
-              <path
-                d="M5 28c5.2-6 9.2-12.2 11-20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-              <path
-                fill="currentColor"
-                d="M15 9.5c2.6-3.6 7.4-3.8 9.2-.4-3 .3-6 .9-9.2.4zm-1 6c3-2.8 8-2 9.6 1-3.4.2-6.6.5-9.6-1zm-1.1 6.1c2.8-2 7.6-1 9 1.9-3 .2-6 .4-9-1.9z"
-              />
-              <circle className="merry-caption-berry" cx="26.2" cy="10.6" r="2.7" />
-            </svg>
-            <p className="merry-coverflow-title">{copy.name}</p>
-            <p className="merry-coverflow-badge">{c.presetBadge}</p>
-          </div>
+          <CaptionNameplate name={copy.name} />
         </div>
       </div>
     </div>

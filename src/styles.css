@@ -384,24 +384,60 @@
   justify-content: center;
   padding: 0.7rem 1.1rem 0.15rem;
   pointer-events: none;
+  container-type: inline-size;
+}
+
+/* 标题牌跟中间海报同宽居中：驯鹿和雪橇留在牌内，不能伸进左侧面板。 */
+.merry-caption-sleigh {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.merry-caption-plate {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  max-width: 42%;
+  margin: 0 -0.2rem 0.55rem;
+}
+
+.merry-caption-plate::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -0.55rem;
+  bottom: -0.38rem;
+  left: -0.55rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #8b2d32;
+  box-shadow: 0 1px 0 #e0c27a;
 }
 
 .merry-coverflow-caption-inner {
-  position: relative;
   display: flex;
   width: max-content;
-  max-width: min(100%, 20rem);
+  max-width: 100%;
+  min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
   pointer-events: none;
-  padding: 0.48rem 0.95rem 0.5rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
-  border-radius: 1.05rem;
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  box-shadow: 0 14px 34px rgba(32, 61, 50, 0.13);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  padding: 0.32rem 0.95rem 0.36rem;
+  border: 2px solid #8b2d32;
+  border-radius: 0.4rem;
+  background: #fffaf2;
+  box-shadow:
+    inset 0 0 0 1.5px #e0c27a,
+    0 8px 18px rgba(32, 61, 50, 0.12);
 }
 
 .merry-coverflow-title {
@@ -410,43 +446,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 1.2rem;
-  line-height: 1.15;
-  color: var(--fg);
-}
-
-.merry-coverflow-badge {
-  flex: none;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-soft) 88%, var(--card));
-  color: var(--muted);
-  padding: 0.12rem 0.48rem;
-  font-size: 0.68rem;
+  font-size: 1.12rem;
   font-weight: 600;
-  line-height: 1.3;
-}
-
-.merry-caption-sprig {
-  position: absolute;
-  top: -0.95rem;
-  right: -0.08rem;
-  width: 1.7rem;
-  height: 1.7rem;
+  line-height: 1.15;
   color: #203d32;
-  pointer-events: none;
-  transform: rotate(8deg);
 }
 
-.merry-caption-berry {
-  fill: #8b2d32;
+.merry-caption-reindeer,
+.merry-caption-santa {
+  display: block;
+  width: auto;
+  height: clamp(2.7rem, 16cqw, 6.2rem);
+  flex: none;
+  overflow: visible;
 }
 
-[data-theme='dark'] .merry-caption-sprig {
-  color: var(--fg);
+.merry-caption-reindeer {
+  position: relative;
+  z-index: 2;
+  margin-right: -0.15rem;
 }
 
-[data-theme='dark'] .merry-caption-berry {
-  fill: var(--accent);
+.merry-caption-santa {
+  position: relative;
+  z-index: 2;
+  margin-left: -0.35rem;
 }
 
 @media (min-width: 640px) and (max-width: 1023px) {
@@ -585,9 +609,10 @@
 
   /* Caption box matches the center card so the cream card sits under that poster
      and cannot cross into the left panel fade. */
+  /* 盒子与中间海报同宽。top 上提，让鹿角和帽尖压住海报下沿，铭牌文字仍在海报下方。 */
   .merry-coverflow-caption {
     position: absolute;
-    top: calc(45% + min(64cqh, 33vw, 30rem) * 2 / 3 + 1.15rem);
+    top: calc(45% + min(64cqh, 33vw, 30rem) * 2 / 3 - 2.05rem);
     bottom: auto;
     left: calc(
       max(0px, 50% - 36rem) + 26rem + min(58cqh, 30vw, 28rem) - min(64cqh, 33vw, 30rem) / 2
@@ -598,13 +623,21 @@
     transform: none;
   }
 
+  .merry-caption-reindeer,
+  .merry-caption-santa {
+    height: clamp(4.15rem, 17.5cqw, 6.4rem);
+  }
+
+  .merry-caption-plate {
+    margin-bottom: 0.85rem;
+  }
+
   .merry-coverflow-caption-inner {
-    max-width: calc(100% - 0.5rem);
-    padding: 0.5rem 1rem 0.52rem 1.05rem;
+    padding: 0.36rem 1.05rem 0.4rem;
   }
 
   .merry-coverflow-title {
-    font-size: 1.4rem;
+    font-size: clamp(1.12rem, 2.3cqh, 1.4rem);
   }
 }
 
@@ -729,14 +762,21 @@ body[data-play-chrome] [data-support-fab] {
   }
 
   .merry-coverflow-caption {
-    padding-top: 0.95rem;
+    padding: 0.35rem 0.75rem 0.1rem;
   }
 
-  .merry-caption-sprig {
-    top: -0.72rem;
-    right: -0.02rem;
-    width: 1.25rem;
-    height: 1.25rem;
+  .merry-caption-reindeer,
+  .merry-caption-santa {
+    height: 2.7rem;
+  }
+
+  .merry-caption-plate {
+    max-width: calc(100% - 5.8rem);
+    margin-bottom: 0.38rem;
+  }
+
+  .merry-coverflow-title {
+    font-size: 1.02rem;
   }
 
   .play-studio-photo {
