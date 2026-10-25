@@ -1,6 +1,6 @@
 # ROADMAP
 
-- 世界标题牌（2026-10-25）：透明 WebP 插画替换 SVG，世界名保留为 HTML 文本，无 Example / 示例徽章，沿用右侧区域限制。
+- 世界标题牌（2026-10-25）：透明 WebP 插画替换 SVG，世界名保留为 HTML 文本，无 Example / 示例徽章，沿用右侧区域限制。typecheck、283 个单元测试通过；完整 e2e 为 63 通过、1 失败：SEO 用例仍期望 H1 仅包含 hero.title，而基线页面已同时渲染 hero.accent（from one photo），本次未改此处。
 
 ## 当前状态（2026-10-25）
 
