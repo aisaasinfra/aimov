@@ -1,7 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ArrowRight, Camera, Check, Clock, Coins, Film, Flame, ShieldCheck, Smartphone, Sparkles, X } from 'lucide-react'
+import { ArrowRight, Camera, Check, Clock, Coins, Film, Flame, ShieldCheck, Smartphone, X } from 'lucide-react'
 import { Faq, faqJsonLd } from '#/components/Faq'
 import { Generator } from '#/components/Generator'
+import { PlayProvider, TemplatePreview, TemplateStrip, TemplateWall } from '#/components/play'
 import { Pricing } from '#/components/Pricing'
 import { VideoCard } from '#/components/VideoCard'
 import { LocalLink } from '#/components/ui'
@@ -28,39 +29,32 @@ export const Route = createFileRoute('/{-$locale}/')({
 const FEATURE_ICONS = [Camera, Film, Smartphone, Clock, ShieldCheck, Coins]
 
 function Home() {
+  return (
+    <PlayProvider>
+      <HomePage />
+    </PlayProvider>
+  )
+}
+
+function HomePage() {
   const c = useContent()
   const ex = site.examples
   return (
     <>
-      {/* Hero：左侧生成器，右侧原版 vs AI 版对比 */}
       <section className="relative overflow-hidden">
         <div className="hero-glow pointer-events-none absolute inset-0" aria-hidden />
         <div className="container-page relative grid gap-10 py-10 lg:grid-cols-[minmax(0,430px)_1fr] lg:gap-16 lg:py-14">
           <div className="space-y-5" id="create">
             <h1 className="font-display text-5xl leading-[1.04] tracking-tight sm:text-6xl">{c.hero.title}</h1>
             <p className="text-lg leading-8 text-muted">{c.hero.subtitle}</p>
+            <TemplateStrip />
             <Generator />
           </div>
           <div className="flex flex-col justify-center gap-5">
             <span className="chip w-fit">
               <Flame className="size-4 text-accent" /> {c.hero.badge}
             </span>
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
-              <VideoCard video={ex.original.video} poster={ex.original.poster} label={c.hero.original} credit={ex.original.credit} />
-              {ex.aiVersions.map((v) => (
-                <VideoCard
-                  key={v.video}
-                  video={v.video}
-                  poster={v.poster}
-                  credit={v.credit}
-                  label={
-                    <>
-                      <Sparkles className="size-3" /> {c.hero.aiVersion}
-                    </>
-                  }
-                />
-              ))}
-            </div>
+            <TemplatePreview />
             <div className="flex flex-wrap justify-center gap-2">
               {c.hero.chips.map((chip) => (
                 <span key={chip} className="chip">
@@ -162,8 +156,9 @@ function Home() {
         </div>
       </section>
 
-      {/* Made with：照片 → 成片 */}
-      <section id="examples" className="scroll-mt-20 border-t border-line bg-bg-soft/60 py-20">
+      <TemplateWall />
+
+      <section id="made-with" className="scroll-mt-20 border-t border-line py-20">
         <div className="container-page grid items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
           <div className="space-y-4">
             <p className="eyebrow text-accent-text">{c.madeWith.eyebrow}</p>

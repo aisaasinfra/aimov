@@ -246,6 +246,56 @@ describe('订阅入账', () => {
     expect(sub()).toMatchObject({ status: 'active', cancel_at_period_end: 0 })
   })
 
+  it('年付当期还开着、扣款不带周期：不重置 grants_done，也不再发一轮积分；少付仍是 mismatch', async () => {
+    const first = addOrder('yearly', yearly.priceCents, yearly.credits)
+    const start = iso(-10 * DAY)
+    const end = addMonths(start, 12)
+    await process(charge(first, 'pay_y1', yearly.priceCents, { providerSubscriptionId: 'msub_1', periodStart: start, periodEnd: end }))
+    const before = sub()
+    expect(before).toMatchObject({ grants_done: 1, current_order_id: first })
+    expect(before.next_grant_at).toBeTruthy()
+    const balance = credits()
+
+    const cheap = await process(charge(first, 'pay_cheap', yearly.priceCents - 100, { providerSubscriptionId: 'msub_1' }))
+    expect(cheap.status).toBe('mismatch')
+    expect(credits()).toBe(balance)
+    expect(sub().grants_done).toBe(1)
+
+    const again = await process(charge(first, 'pay_y2', yearly.priceCents, { providerSubscriptionId: 'msub_1' }))
+    expect(again).toMatchObject({ status: 'ignored', orderId: first, note: 'open yearly period kept; no second grant' })
+    expect(credits()).toBe(balance)
+    expect(sub()).toMatchObject({ grants_done: 1, current_order_id: first, next_grant_at: before.next_grant_at })
+    expect(orders().filter((row) => row.status === 'paid')).toHaveLength(1)
+  })
+
+  it('状态事件把年付推到新的一期后，不带周期的扣款只发首月', async () => {
+    const first = addOrder('yearly', yearly.priceCents, yearly.credits)
+    const start = iso(-40 * DAY)
+    const end = addMonths(start, 12)
+    await process(charge(first, 'pay_y1', yearly.priceCents, { providerSubscriptionId: 'msub_1', periodStart: start, periodEnd: end }))
+    const newStart = iso()
+    await process(state(iso(), { status: 'active', periodStart: newStart, periodEnd: addMonths(newStart, 12) }))
+    expect(sub().next_grant_at).toBeNull()
+    const renewal = await process(charge(first, 'pay_y2', yearly.priceCents, { providerSubscriptionId: 'msub_1' }))
+    expect(renewal.status).toBe('processed')
+    expect(renewal.orderId).not.toBe(first)
+    expect(sub()).toMatchObject({ grants_done: 1, current_order_id: renewal.orderId })
+    expect(credits()).toBe(yearly.credits * 2)
+  })
+
+  it('年付带上新周期的续费仍然入账', async () => {
+    const first = addOrder('yearly', yearly.priceCents, yearly.credits)
+    const start = iso(-20 * DAY)
+    await process(charge(first, 'pay_y1', yearly.priceCents, { providerSubscriptionId: 'msub_1', periodStart: start, periodEnd: addMonths(start, 12) }))
+    const nextStart = iso(DAY)
+    const renewal = await process(
+      charge(first, 'pay_y2', yearly.priceCents, { providerSubscriptionId: 'msub_1', periodStart: nextStart, periodEnd: addMonths(nextStart, 12) }),
+    )
+    expect(renewal.status).toBe('processed')
+    expect(credits()).toBe(yearly.credits * 2)
+    expect(sub().current_period_start).toBe(nextStart)
+  })
+
   it('状态事件乱序：更早发生的事件不覆盖更晚的状态；终止后不再算有效订阅', async () => {
     await startMonthly()
     expect((await process(state(iso(2 * DAY), { cancelAtPeriodEnd: true }))).status).toBe('processed')

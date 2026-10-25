@@ -15,7 +15,7 @@
   "vars": {
     "APP_ENV": "development",
     "SITE_URL": "http://localhost:3000",
-    // waffo | dodo | stripe | mock（mock 只允许非 production）
+    // waffo | paypal | dodo | stripe | mock（mock 只允许非 production）。产品默认通道是 Waffo + PayPal.cn。
     "PAYMENT_PROVIDER": "mock",
     // fal | yir | mock（mock 只允许非 production）
     "VIDEO_PROVIDER": "mock",
@@ -33,6 +33,11 @@
     // Stripe：test | live，要和 STRIPE_SECRET_KEY 的模式一致；STRIPE_PRODUCTS 存 Price ID（price_...），scripts/stripe-setup.mjs 可以生成
     "STRIPE_ENVIRONMENT": "test",
     "STRIPE_PRODUCTS": "{}",
+    // PayPal.cn 走全球 Orders v2。sandbox | live；留空按 sandbox。PAYPAL_API_BASE 留空用官方主机，填了必须与模式完全一致。
+    "PAYPAL_MODE": "sandbox",
+    "PAYPAL_API_BASE": "",
+    // 可选 sku 映射。PayPal 按订单金额收积分包，不要求每个套餐都有商品 id。订阅不走 PayPal。
+    "PAYPAL_PRODUCTS": "{}",
     "GOOGLE_CLIENT_ID": "",
     // Cloudflare Turnstile 站点密钥（公开）；留空 = 不启用。启用时必须同时 `wrangler secret put TURNSTILE_SECRET_KEY`
     "TURNSTILE_SITE_KEY": "",

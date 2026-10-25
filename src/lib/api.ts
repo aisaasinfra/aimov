@@ -60,6 +60,8 @@ export type ClientConfig = {
   googleClientId: string | null
   devLogin: boolean
   paymentProvider: string
+  // 结账可选通道。本地 mock 只有 mock。Waffo + PayPal 都配齐时两个都在。
+  paymentChannels?: string[]
   turnstileSiteKey: string | null
   // 后台运营参数里的维护模式和全站公告（按语言，空字符串表示不显示）
   notice: { maintenance: boolean; announcement: Partial<Record<string, string>> }

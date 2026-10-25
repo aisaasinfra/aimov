@@ -6,4 +6,8 @@ interface Env {
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
   PAYMENT_NOTIFY_WEBHOOK_URL?: string
+  // PayPal.cn（Orders v2）。模式和主机在 wrangler vars；这三个是 secret。
+  PAYPAL_CLIENT_ID?: string
+  PAYPAL_CLIENT_SECRET?: string
+  PAYPAL_WEBHOOK_ID?: string
 }

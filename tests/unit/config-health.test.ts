@@ -92,6 +92,22 @@ describe('checkConfig', () => {
     expect(keys({ ...dodo, planIds: ['monthly', 'yearly'] })).toEqual([])
   })
 
+  it('PayPal：不要求商品目录；模式和主机必须是官方值；占位 webhook id 拒绝', () => {
+    const secrets = { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 'secret', PAYPAL_WEBHOOK_ID: 'WH-1' }
+    expect(checkConfig(ready({ vars: { PAYMENT_PROVIDER: 'paypal', PAYPAL_MODE: 'live', PAYPAL_PRODUCTS: '{}' }, secrets }))).toEqual([])
+    expect(keys(ready({ vars: { PAYMENT_PROVIDER: 'paypal', PAYPAL_MODE: 'live', PAYPAL_PRODUCTS: '{}' }, secrets: { PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 'secret' } }))).toContain(
+      'error:PAYPAL_WEBHOOK_ID',
+    )
+    expect(
+      keys(ready({ vars: { PAYMENT_PROVIDER: 'paypal', PAYPAL_MODE: 'live' }, secrets: { ...secrets, PAYPAL_WEBHOOK_ID: 'WEBHOOK_ID' } })),
+    ).toContain('error:PAYPAL_WEBHOOK_ID')
+    expect(keys(ready({ vars: { PAYMENT_PROVIDER: 'paypal', PAYPAL_MODE: 'prod' }, secrets }))).toContain('error:PAYPAL_MODE')
+    expect(keys(ready({ vars: { PAYMENT_PROVIDER: 'paypal', PAYPAL_MODE: 'live', PAYPAL_API_BASE: 'https://evil.example' }, secrets }))).toContain('error:PAYPAL_API_BASE')
+    expect(keys(ready({ vars: { PAYMENT_PROVIDER: 'paypal', PAYPAL_MODE: 'sandbox' }, secrets }))).toEqual(['warn:PAYPAL_MODE'])
+    const unknown = checkConfig(ready({ vars: { PAYMENT_PROVIDER: 'creem' } }))
+    expect(unknown).toEqual([expect.objectContaining({ key: 'PAYMENT_PROVIDER', message: expect.stringContaining('paypal') })])
+  })
+
   it('Stripe：Key 的 test / live 模式要和 STRIPE_ENVIRONMENT 一致；doctor 只知道密钥名时不核对前缀', () => {
     const stripe = (environment: string, key: string | true) =>
       ready({

@@ -4,6 +4,18 @@ Notable changes to the template. Derived sites pick them up with `git merge` fro
 
 中文说明在每条下方。
 
+## 2026-10-25
+
+### Added: PayPal.cn credit packs next to Waffo, and a Christmas video landing
+
+- PayPal Orders v2 (PayPal.cn uses the same global hosts) is a checkout channel beside Waffo. Packs can be paid with either; plans stay on Waffo. Dodo and Stripe remain selectable as `PAYMENT_PROVIDER`. Local default is still `mock`. Webhook verify uses Web Crypto, not the Node PayPal SDK. Credits are granted only on `PAYMENT.CAPTURE.COMPLETED`.
+- A Waffo yearly renewal that keeps the open period and has no new period bounds no longer resets `grants_done` or grants a second round. A period the state event just opened still grants the first month. Underpay is still a mismatch.
+- The landing is a Christmas video product: cream, pine and berry, video templates with lengths, a template strip and wall, a play-first hero, and a sticky upload/create bar. Google One Tap dismiss memory and the Accept-Language suggestion stay.
+
+Upgrading a site: merge upstream. New vars `PAYPAL_MODE`, `PAYPAL_API_BASE`, `PAYPAL_PRODUCTS` (may stay `{}`). New secrets `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`. No migration. Webhook URL is `https://<domain>/api/webhooks/paypal`.
+
+新增：PayPal.cn 与 Waffo 并列卖积分包（订阅仍走 Waffo）；Waffo 年付在当期还开着且扣款不带新周期时不再重复发放。首页改为圣诞视频：模板条、模板墙、先播放的预览和吸底上传/创建。站点升级：合并 upstream；新增上述 vars 和三个 secret，没有迁移。
+
 ## 2026-10-24
 
 ### Fixed: dev server always uses payment test environments
