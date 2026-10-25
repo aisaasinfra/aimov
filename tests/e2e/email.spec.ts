@@ -40,7 +40,7 @@ async function reminders(request: APIRequestContext, takedownId: string, hours: 
 test('支付邮件：同一事件重放、换事件 ID 重复回调都只发一封，用下单时的语言', async ({ request }) => {
   const email = uniqueEmail('mail-order')
   await devLogin(request, email)
-  const { orderId } = await json<{ orderId: string }>(post(request, '/api/checkout', { packageId: 'starter', locale: 'zh' }))
+  const { orderId } = await json<{ orderId: string }>(post(request, '/api/checkout', { packageId: 'starter', locale: 'zh-TW' }))
   for (const eventId of [`evt_${orderId}`, `evt_${orderId}`, `evt_${orderId}_dup`]) {
     await json(post(request, '/api/mock-payments/complete', { orderId, outcome: 'paid', eventId }))
   }
@@ -49,12 +49,12 @@ test('支付邮件：同一事件重放、换事件 ID 重复回调都只发一�
   expect(emails.map((e) => e.dedupe_key)).toEqual([`order_paid:${orderId}`])
   expect(emails[0]).toMatchObject({
     template: 'order_paid',
-    locale: 'zh',
+    locale: 'zh-TW',
     status: 'sent',
     attempts: 1,
     params: { orderId, credits: 20, amount: '$9.90' },
   })
-  expect(emails[0].subject).toContain('20 个积分已到账')
+  expect(emails[0].subject).toContain('20 點已入帳')
   expect(emails[0].provider_message_id).toBeTruthy()
 })
 
@@ -62,8 +62,8 @@ test('生成邮件：成功、失败退积分各一封，跟随用户最近使�
   const email = uniqueEmail('mail-gen')
   const user = await devLogin(request, email)
   await buyPackage(request, 'starter')
-  const ok = await generate(request, { locale: 'zh' })
-  const bad = await generate(request, { locale: 'zh', mockOutcome: 'fail' })
+  const ok = await generate(request, { locale: 'zh-TW' })
+  const bad = await generate(request, { locale: 'zh-TW', mockOutcome: 'fail' })
   for (const [id, status] of [
     [ok, 'succeeded'],
     [bad, 'failed'],
@@ -84,12 +84,12 @@ test('生成邮件：成功、失败退积分各一封，跟随用户最近使�
     .poll(async () => (await outbox(request, { to: email })).map((e) => e.dedupe_key).sort(), { timeout: 10_000 })
     .toEqual([`generation_failed:${bad}`, `generation_succeeded:${ok}`, expect.stringMatching(/^order_paid:/)])
   const byTemplate = Object.fromEntries((await outbox(request, { to: email })).map((e) => [e.template, e]))
-  // 下单时是英文，之后在中文页面生成：每封邮件用发信当时的语言
+  // 下单时是英文，之后在繁体页面生成：每封邮件用发信当时的语言
   expect(byTemplate.order_paid).toMatchObject({ locale: 'en', status: 'sent' })
-  expect(byTemplate.generation_succeeded).toMatchObject({ locale: 'zh', status: 'sent', user_id: user.id })
+  expect(byTemplate.generation_succeeded).toMatchObject({ locale: 'zh-TW', status: 'sent', user_id: user.id })
   expect(byTemplate.generation_succeeded.params.expiresAt).toEqual(expect.any(String))
-  expect(byTemplate.generation_failed).toMatchObject({ locale: 'zh', status: 'sent', params: { generationId: bad, credits: 6 } })
-  expect(byTemplate.generation_failed.subject).toContain('积分已退回')
+  expect(byTemplate.generation_failed).toMatchObject({ locale: 'zh-TW', status: 'sent', params: { generationId: bad, credits: 6 } })
+  expect(byTemplate.generation_failed.subject).toContain('點數已退回')
 })
 
 test('举报邮件：未登录举报不发回执，只提醒管理员；临近截止、超时各提醒一次；下架后通知举报人和作者，不再提醒；登录用户填本人邮箱才收回执', async ({ page, browser }, testInfo) => {
@@ -118,7 +118,7 @@ test('举报邮件：未登录举报不发回执，只提醒管理员；临近�
         contentRef: `video ${genId}`,
         reason: 'impersonation',
         attest: true,
-        locale: 'zh',
+        locale: 'zh-TW',
       }),
       201,
     )
@@ -153,7 +153,7 @@ test('举报邮件：未登录举报不发回执，只提醒管理员；临近�
     const [removed] = await outbox(anon.request, { to: ownerEmail, ref: report.id })
     expect(removed).toMatchObject({ template: 'content_removed', locale: 'en', status: 'sent', params: { reportId: report.id, videos: 1 } })
     const resolved = (await outbox(anon.request, { to: reporterEmail })).find((e) => e.template === 'takedown_resolved')
-    expect(resolved).toMatchObject({ locale: 'zh', params: { outcome: 'removed' } })
+    expect(resolved).toMatchObject({ locale: 'zh-TW', params: { outcome: 'removed' } })
     const { entries } = await json<{ entries: Array<{ target_id: string; detail: string }> }>(admin.request.get('/api/admin/audit'))
     expect(JSON.parse(entries.find((e) => e.target_id === report.id)!.detail)).not.toHaveProperty('owners')
 

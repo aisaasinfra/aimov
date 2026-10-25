@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LOCALES } from '#/config/site'
 import {
+  PAYPAL_LOCALE_TAGS,
   captureApprovedPaypalOrder,
   crc32Decimal,
   createPaypalProvider,
@@ -88,8 +90,8 @@ function json(body: unknown, status = 200) {
 const checkoutInput = {
   order: { id: 'ord_1', packageId: 'starter', credits: 20, amountCents: 990, currency: 'USD' },
   user: { id: 'u1', email: 'a@example.com', name: null },
-  successUrl: 'https://example.com/zh/checkout/success',
-  cancelUrl: 'https://example.com/zh/pricing',
+  successUrl: 'https://example.com/zh-TW/checkout/success',
+  cancelUrl: 'https://example.com/zh-TW/pricing',
 }
 
 beforeEach(() => {
@@ -99,6 +101,22 @@ beforeEach(() => {
 afterEach(() => {
   resetPaypalForTests()
   vi.unstubAllGlobals()
+})
+
+describe('PayPal 语言标签', () => {
+  it('每种公开语言一个区域默认值，没有简体', () => {
+    expect(Object.keys(PAYPAL_LOCALE_TAGS).sort()).toEqual([...LOCALES].sort())
+    expect(PAYPAL_LOCALE_TAGS).toMatchObject({
+      en: 'en-US',
+      de: 'de-DE',
+      es: 'es-ES',
+      fr: 'fr-FR',
+      'pt-BR': 'pt-BR',
+      'zh-TW': 'zh-TW',
+    })
+    expect(PAYPAL_LOCALE_TAGS).not.toHaveProperty('zh')
+    expect(PAYPAL_LOCALE_TAGS).not.toHaveProperty('zh-CN')
+  })
 })
 
 describe('PayPal 金额与证书地址', () => {
@@ -289,7 +307,7 @@ describe('createPaypalProvider', () => {
     expect(bodies[0]).toMatchObject({
       intent: 'CAPTURE',
       purchase_units: [{ custom_id: 'ord_1', invoice_id: 'ord_1', reference_id: 'starter', items: [{ category: 'DIGITAL_GOODS', sku: 'starter' }] }],
-      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', locale: 'zh-CN' } } },
+      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', locale: 'zh-TW' } } },
     })
     vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
       const url = String(input)

@@ -48,11 +48,14 @@ describe('加入等待列表', () => {
   it('同一邮箱只插入一次，不创建用户', async () => {
     const env = { DB: db } as Env
     const fetcher = vi.fn<typeof fetch>()
-    expect(await joinWaitlist(env, { email: 'A@Example.com', locale: 'zh', source: 'nope', turnstileToken: '', remoteIp: undefined }, fetcher)).toBe('added')
+    expect(await joinWaitlist(env, { email: 'A@Example.com', locale: 'zh-TW', source: 'nope', turnstileToken: '', remoteIp: undefined }, fetcher)).toBe('added')
     expect(await joinWaitlist(env, { email: 'a@example.com', locale: 'en', source: 'pricing', turnstileToken: '', remoteIp: undefined }, fetcher)).toBe('already')
     expect(fetcher).not.toHaveBeenCalled()
     const row = sqlite.prepare('SELECT email, locale, source FROM waitlist').get() as { email: string; locale: string; source: string }
-    expect(row).toEqual({ email: 'a@example.com', locale: 'zh', source: 'waitlist' })
+    expect(row).toEqual({ email: 'a@example.com', locale: 'zh-TW', source: 'waitlist' })
+    expect(await joinWaitlist(env, { email: 'hans@example.com', locale: 'zh', source: 'waitlist', turnstileToken: '', remoteIp: undefined }, fetcher)).toBe('added')
+    const hans = sqlite.prepare(`SELECT locale FROM waitlist WHERE email = 'hans@example.com'`).get() as { locale: string }
+    expect(hans.locale).toBe('en')
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 0 })
   })
 

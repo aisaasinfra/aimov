@@ -5,7 +5,7 @@ import { findArticle, relatedArticles, site } from '#/config/site'
 import { getContent, localeFromParam, pageHead, useContent, useLocale, useLocalePath } from '#/lib/i18n'
 import { articleJsonLd, breadcrumbJsonLd, jsonLdScript } from '#/lib/seo'
 
-// SEO 文章：slug 来自 site.articles。非文章 slug 不参与匹配，这样 /zh 会落到中文首页而不是被当成 slug
+// SEO 文章：slug 来自 site.articles。非文章 slug 不参与匹配，这样 /zh-TW 会落到繁体首页而不是被当成 slug
 export const Route = createFileRoute('/{-$locale}/$slug')({
   params: {
     parse: (raw) => (findArticle(raw.slug) ? raw : false),

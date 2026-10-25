@@ -1,7 +1,8 @@
 import { DEFAULT_LOCALE, LOCALE_META, isLocale, localePath, site, type Locale } from '#/config/site'
 import type { AlertKind } from './alerts'
 
-// 交易邮件模板。用户邮件每种语言一份（新增语言时类型检查会要求补齐），管理员邮件固定中文（后台是中文）。
+// 交易邮件模板。用户邮件按公开 LOCALES 各一份（新增语言时类型检查会要求补齐）。
+// 管理员邮件仍是运营用简体中文，locale 记成 'zh'，但 'zh' 不在 LOCALES 里，也不会变成站点语言。
 // 用户输入（姓名、留言内容等）只出现在正文并全部转义，不进 Subject。
 
 export interface TemplateParams {
@@ -45,17 +46,30 @@ function link(ctx: Ctx, path: string) {
   return `${ctx.siteUrl}${localePath(ctx.locale, path)}`
 }
 
-function date(ctx: Ctx, iso: string, withTime = false) {
-  return new Intl.DateTimeFormat(LOCALE_META[ctx.locale].tag, {
+function formatInTag(tag: string, iso: string, withTime = false) {
+  return new Intl.DateTimeFormat(tag, {
     dateStyle: 'medium',
     ...(withTime ? { timeStyle: 'short' } : {}),
     timeZone: 'UTC',
   }).format(new Date(iso)) + (withTime ? ' UTC' : '')
 }
 
+function date(ctx: Ctx, iso: string, withTime = false) {
+  return formatInTag(LOCALE_META[ctx.locale].tag, iso, withTime)
+}
+
+// 运营邮件的日期。不走 LOCALE_META，避免为了后台再挂一个简体站点语言。
+function operatorDate(iso: string, withTime = false) {
+  return formatInTag('zh-CN', iso, withTime)
+}
+
 const AI_FOOTER: Record<Locale, string> = {
   en: `Videos made with ${brand} are AI-generated. Please label them as AI when you share them.`,
-  zh: `${brand} 生成的视频均为 AI 生成，分享时请注明。`,
+  de: `Videos von ${brand} sind KI-generiert. Bitte kennzeichne sie beim Teilen als KI.`,
+  es: `Los videos de ${brand} están generados por IA. Indícalo cuando los compartas.`,
+  fr: `Les vidéos créées avec ${brand} sont générées par IA. Indiquez-le lorsque vous les partagez.`,
+  'pt-BR': `Os vídeos feitos com ${brand} são gerados por IA. Avise isso ao compartilhar.`,
+  'zh-TW': `${brand} 產生的影片都是 AI 生成，分享時請註明。`,
 }
 
 const REASONS_ZH: Record<string, string> = {
@@ -136,12 +150,52 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
       cta: { label: 'Open my videos', url: link(ctx, '/dashboard') },
       footer: AI_FOOTER.en,
     }),
-    zh: (p, ctx) => ({
-      subject: `你的 ${brand} 视频已生成`,
-      heading: '视频已生成',
-      paragraphs: ['你的 AI 视频已经可以观看和下载了。', p.expiresAt ? `成片保存到 ${date(ctx, p.expiresAt)}，之后会自动删除；需要长期保留请及时下载。` : ''],
-      cta: { label: '查看我的视频', url: link(ctx, '/dashboard') },
-      footer: AI_FOOTER.zh,
+    de: (p, ctx) => ({
+      subject: `Dein ${brand}-Video ist fertig`,
+      heading: 'Dein Video ist fertig',
+      paragraphs: [
+        'Dein KI-Video kann jetzt angesehen und heruntergeladen werden.',
+        p.expiresAt ? `Wir behalten es bis ${date(ctx, p.expiresAt)} und löschen es danach automatisch. Lade eine Kopie herunter, wenn du es behalten willst.` : '',
+      ],
+      cta: { label: 'Meine Videos öffnen', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.de,
+    }),
+    es: (p, ctx) => ({
+      subject: `Tu video de ${brand} está listo`,
+      heading: 'Tu video está listo',
+      paragraphs: [
+        'Tu video de IA ya se puede ver y descargar.',
+        p.expiresAt ? `Lo guardamos hasta el ${date(ctx, p.expiresAt)} y después lo borramos. Descarga una copia si quieres conservarlo.` : '',
+      ],
+      cta: { label: 'Abrir mis videos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.es,
+    }),
+    fr: (p, ctx) => ({
+      subject: `Votre vidéo ${brand} est prête`,
+      heading: 'Votre vidéo est prête',
+      paragraphs: [
+        'Votre vidéo générée par IA peut être regardée et téléchargée.',
+        p.expiresAt ? `Nous la conservons jusqu’au ${date(ctx, p.expiresAt)}, puis elle est supprimée. Téléchargez une copie si vous voulez la garder.` : '',
+      ],
+      cta: { label: 'Ouvrir mes vidéos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.fr,
+    }),
+    'pt-BR': (p, ctx) => ({
+      subject: `Seu vídeo ${brand} está pronto`,
+      heading: 'Seu vídeo está pronto',
+      paragraphs: [
+        'Seu vídeo de IA já pode ser assistido e baixado.',
+        p.expiresAt ? `Guardamos até ${date(ctx, p.expiresAt)} e depois apagamos. Baixe uma cópia se quiser manter.` : '',
+      ],
+      cta: { label: 'Abrir meus vídeos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER['pt-BR'],
+    }),
+    'zh-TW': (p, ctx) => ({
+      subject: `你的 ${brand} 影片已產生`,
+      heading: '影片已產生',
+      paragraphs: ['你的 AI 影片可以觀看和下載了。', p.expiresAt ? `成片保留到 ${date(ctx, p.expiresAt)}，之後會自動刪除；想長期保存請先下載。` : ''],
+      cta: { label: '查看我的影片', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER['zh-TW'],
     }),
   },
 
@@ -155,11 +209,47 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
       ],
       cta: { label: 'Try again', url: link(ctx, '/') },
     }),
-    zh: (p, ctx) => ({
-      subject: `你的 ${brand} 视频生成失败，积分已退回`,
-      heading: '视频生成失败',
-      paragraphs: [`这次生成没有成功，${p.credits} 个积分已退回你的账户。`, '可以用同一张照片再试一次，或者换一张正脸清晰的照片。'],
-      cta: { label: '重新生成', url: link(ctx, '/') },
+    de: (p, ctx) => ({
+      subject: `Dein ${brand}-Video ist fehlgeschlagen — Guthaben zurück`,
+      heading: 'Das Video konnte nicht erstellt werden',
+      paragraphs: [
+        `Beim Erstellen ist etwas schiefgelaufen. Wir haben ${p.credits} Credits auf dein Guthaben zurückgebucht.`,
+        'Du kannst es mit demselben Foto noch einmal versuchen oder ein klares Frontalfoto verwenden.',
+      ],
+      cta: { label: 'Erneut versuchen', url: link(ctx, '/') },
+    }),
+    es: (p, ctx) => ({
+      subject: `Tu video de ${brand} falló — créditos devueltos`,
+      heading: 'No pudimos crear tu video',
+      paragraphs: [
+        `Algo falló al generar el video. Devolvimos ${p.credits} créditos a tu saldo.`,
+        'Puedes intentarlo con la misma foto o con una de frente, nítida.',
+      ],
+      cta: { label: 'Intentar de nuevo', url: link(ctx, '/') },
+    }),
+    fr: (p, ctx) => ({
+      subject: `Votre vidéo ${brand} a échoué — crédits recrédités`,
+      heading: 'Nous n’avons pas pu créer votre vidéo',
+      paragraphs: [
+        `Un problème est survenu pendant la génération. Nous avons recrédité ${p.credits} crédits sur votre solde.`,
+        'Vous pouvez réessayer avec la même photo, ou avec un portrait net de face.',
+      ],
+      cta: { label: 'Réessayer', url: link(ctx, '/') },
+    }),
+    'pt-BR': (p, ctx) => ({
+      subject: `Seu vídeo ${brand} falhou — créditos devolvidos`,
+      heading: 'Não foi possível criar seu vídeo',
+      paragraphs: [
+        `Algo deu errado na geração. Devolvemos ${p.credits} créditos ao seu saldo.`,
+        'Tente de novo com a mesma foto ou com um retrato nítido de frente.',
+      ],
+      cta: { label: 'Tentar de novo', url: link(ctx, '/') },
+    }),
+    'zh-TW': (p, ctx) => ({
+      subject: `你的 ${brand} 影片沒有產生，點數已退回`,
+      heading: '影片沒有產生',
+      paragraphs: [`這次沒有成功，${p.credits} 點已退回你的帳戶。`, '可以用同一張照片再試，或換一張清楚的正面照。'],
+      cta: { label: '重新產生', url: link(ctx, '/') },
     }),
   },
 
@@ -173,11 +263,47 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
       ],
       cta: { label: 'Create a video', url: link(ctx, '/') },
     }),
-    zh: (p, ctx) => ({
-      subject: `${p.credits} 个积分已到账`,
-      heading: '积分已到账',
-      paragraphs: [`感谢购买！${p.credits} 个积分已加到你的 ${brand} 账户（订单 ${p.orderId}，${p.amount}）。`, '付款收据由支付服务商另行发送。'],
-      cta: { label: '开始生成', url: link(ctx, '/') },
+    de: (p, ctx) => ({
+      subject: `${p.credits} Credits auf deinem ${brand}-Konto`,
+      heading: 'Credits gutgeschrieben',
+      paragraphs: [
+        `Danke für deinen Kauf. ${p.credits} Credits sind auf deinem Konto (Bestellung ${p.orderId}, ${p.amount}).`,
+        'Die Zahlungsquittung schickt unser Zahlungsanbieter separat.',
+      ],
+      cta: { label: 'Video erstellen', url: link(ctx, '/') },
+    }),
+    es: (p, ctx) => ({
+      subject: `${p.credits} créditos añadidos a tu cuenta de ${brand}`,
+      heading: 'Créditos añadidos',
+      paragraphs: [
+        `Gracias por tu compra. Añadimos ${p.credits} créditos a tu cuenta (pedido ${p.orderId}, ${p.amount}).`,
+        'El recibo lo envía por separado nuestro proveedor de pagos.',
+      ],
+      cta: { label: 'Crear un video', url: link(ctx, '/') },
+    }),
+    fr: (p, ctx) => ({
+      subject: `${p.credits} crédits ajoutés à votre compte ${brand}`,
+      heading: 'Crédits ajoutés',
+      paragraphs: [
+        `Merci pour votre achat. ${p.credits} crédits ont été ajoutés à votre compte (commande ${p.orderId}, ${p.amount}).`,
+        'Le reçu de paiement est envoyé séparément par notre prestataire de paiement.',
+      ],
+      cta: { label: 'Créer une vidéo', url: link(ctx, '/') },
+    }),
+    'pt-BR': (p, ctx) => ({
+      subject: `${p.credits} créditos adicionados à sua conta ${brand}`,
+      heading: 'Créditos adicionados',
+      paragraphs: [
+        `Obrigado pela compra. ${p.credits} créditos entraram na sua conta (pedido ${p.orderId}, ${p.amount}).`,
+        'O recibo é enviado à parte pelo processador de pagamento.',
+      ],
+      cta: { label: 'Criar um vídeo', url: link(ctx, '/') },
+    }),
+    'zh-TW': (p, ctx) => ({
+      subject: `${p.credits} 點已入帳`,
+      heading: '點數已入帳',
+      paragraphs: [`謝謝購買。${p.credits} 點已加到你的 ${brand} 帳戶（訂單 ${p.orderId}，${p.amount}）。`, '付款收據由金流服務另行寄出。'],
+      cta: { label: '開始製作', url: link(ctx, '/') },
     }),
   },
 
@@ -190,12 +316,44 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
         'To add information, such as a link or the file name of the video, reply to this email.',
       ],
     }),
-    zh: (p, ctx) => ({
-      subject: `我们已收到你的举报（${p.reportId}）`,
-      heading: '已收到举报',
+    de: (p, ctx) => ({
+      subject: `Wir haben deine Meldung erhalten (${p.reportId})`,
+      heading: 'Meldung erhalten',
       paragraphs: [
-        `举报编号：${p.reportId}。我们会在 ${date(ctx, p.dueAt, true)} 前处理完毕，结果会发到这个邮箱。`,
-        '需要补充信息（例如视频链接或下载文件名）请直接回复本邮件。',
+        `Referenz: ${p.reportId}. Wir prüfen sie bis ${date(ctx, p.dueAt, true)} und schicken dir das Ergebnis per E-Mail.`,
+        'Weitere Angaben, etwa ein Link oder der Dateiname des Videos, kannst du antworten.',
+      ],
+    }),
+    es: (p, ctx) => ({
+      subject: `Recibimos tu reporte (${p.reportId})`,
+      heading: 'Reporte recibido',
+      paragraphs: [
+        `Referencia: ${p.reportId}. Lo revisaremos antes del ${date(ctx, p.dueAt, true)} y te escribiremos el resultado.`,
+        'Para añadir un enlace o el nombre del archivo, responde a este correo.',
+      ],
+    }),
+    fr: (p, ctx) => ({
+      subject: `Nous avons reçu votre signalement (${p.reportId})`,
+      heading: 'Signalement reçu',
+      paragraphs: [
+        `Référence : ${p.reportId}. Nous l’examinerons avant le ${date(ctx, p.dueAt, true)} et vous enverrons le résultat.`,
+        'Pour ajouter un lien ou le nom du fichier, répondez à cet e-mail.',
+      ],
+    }),
+    'pt-BR': (p, ctx) => ({
+      subject: `Recebemos sua denúncia (${p.reportId})`,
+      heading: 'Denúncia recebida',
+      paragraphs: [
+        `Referência: ${p.reportId}. Vamos analisar até ${date(ctx, p.dueAt, true)} e enviar o resultado por e-mail.`,
+        'Para incluir um link ou o nome do arquivo, responda a esta mensagem.',
+      ],
+    }),
+    'zh-TW': (p, ctx) => ({
+      subject: `我們已收到你的檢舉（${p.reportId}）`,
+      heading: '已收到檢舉',
+      paragraphs: [
+        `檢舉編號：${p.reportId}。我們會在 ${date(ctx, p.dueAt, true)} 前處理完，結果寄到這個信箱。`,
+        '若要補充資訊（例如影片連結或下載檔名），直接回覆這封信。',
       ],
     }),
   },
@@ -212,15 +370,59 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
               "If you have a link or the video's file name (it contains an ID starting with gen_), reply to this email and we'll take another look.",
             ],
     }),
-    zh: (p) => ({
-      subject: `你的举报有了处理结果（${p.reportId}）`,
-      heading: p.outcome === 'removed' ? '内容已删除' : '举报未通过',
+    de: (p) => ({
+      subject: `Update zu deiner Meldung (${p.reportId})`,
+      heading: p.outcome === 'removed' ? 'Inhalt entfernt' : 'Keine Maßnahme',
       paragraphs:
         p.outcome === 'removed'
-          ? ['我们核实了你的举报，已删除相关视频，并禁止同一张照片再次上传。']
+          ? ['Wir haben deine Meldung geprüft und den Inhalt entfernt. Das Ausgangsfoto kann nicht erneut hochgeladen werden.']
           : [
-              '根据目前提供的信息，我们没能定位到需要删除的内容。',
-              '如果你有视频链接或下载文件名（文件名里有以 gen_ 开头的编号），请回复本邮件，我们会重新核查。',
+              'Mit den vorliegenden Angaben konnten wir keinen Inhalt zum Entfernen finden.',
+              'Wenn du einen Link oder den Dateinamen hast (darin steht eine ID mit gen_), antworte auf diese E-Mail. Wir schauen noch einmal nach.',
+            ],
+    }),
+    es: (p) => ({
+      subject: `Novedades de tu reporte (${p.reportId})`,
+      heading: p.outcome === 'removed' ? 'Contenido retirado' : 'Sin medidas',
+      paragraphs:
+        p.outcome === 'removed'
+          ? ['Revisamos tu reporte y retiramos el contenido. La foto de origen queda bloqueada para nuevas subidas.']
+          : [
+              'Con la información disponible no pudimos identificar contenido que retirar.',
+              'Si tienes un enlace o el nombre del archivo (incluye un ID que empieza por gen_), responde a este correo y lo revisamos de nuevo.',
+            ],
+    }),
+    fr: (p) => ({
+      subject: `Suite de votre signalement (${p.reportId})`,
+      heading: p.outcome === 'removed' ? 'Contenu retiré' : 'Aucune mesure',
+      paragraphs:
+        p.outcome === 'removed'
+          ? ['Nous avons examiné votre signalement et retiré le contenu. La photo source ne peut plus être envoyée.']
+          : [
+              'Avec les informations fournies, nous n’avons pas identifié de contenu à retirer.',
+              'Si vous avez un lien ou le nom du fichier (il contient un identifiant commençant par gen_), répondez à cet e-mail.',
+            ],
+    }),
+    'pt-BR': (p) => ({
+      subject: `Atualização da sua denúncia (${p.reportId})`,
+      heading: p.outcome === 'removed' ? 'Conteúdo removido' : 'Nenhuma medida',
+      paragraphs:
+        p.outcome === 'removed'
+          ? ['Analisamos a denúncia e removemos o conteúdo. A foto de origem não pode ser enviada de novo.']
+          : [
+              'Com as informações enviadas, não localizamos conteúdo para remover.',
+              'Se você tiver um link ou o nome do arquivo (com um ID que começa com gen_), responda a este e-mail.',
+            ],
+    }),
+    'zh-TW': (p) => ({
+      subject: `你的檢舉有結果了（${p.reportId}）`,
+      heading: p.outcome === 'removed' ? '內容已刪除' : '檢舉未成立',
+      paragraphs:
+        p.outcome === 'removed'
+          ? ['我們核對了你的檢舉，已刪除相關影片，並禁止同一張照片再次上傳。']
+          : [
+              '依目前的資訊，我們沒有找到需要刪除的內容。',
+              '如果你有影片連結或下載檔名（檔名裡有 gen_ 開頭的編號），請回覆這封信，我們會再查一次。',
             ],
     }),
   },
@@ -234,12 +436,44 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
         'Only upload photos of yourself or of people who agreed to it. If you think this was a mistake, reply to this email.',
       ],
     }),
-    zh: (p) => ({
-      subject: `你在 ${brand} 的视频已被删除`,
-      heading: '视频已被删除',
+    de: (p) => ({
+      subject: `Ein Video in deinem ${brand}-Konto wurde entfernt`,
+      heading: 'Video entfernt',
       paragraphs: [
-        `收到举报（${p.reportId}）后，我们删除了用同一张照片生成的 ${p.videos} 个视频，并禁止这张照片再次上传。`,
-        '只能上传你本人或已取得对方同意的照片。如果你认为处理有误，请回复本邮件说明。',
+        `Nach einer Meldung (${p.reportId}) haben wir ${p.videos} Video(s) aus demselben Foto entfernt und weitere Uploads dieses Fotos gesperrt.`,
+        'Lade nur Fotos von dir oder von Personen hoch, die zugestimmt haben. Wenn das ein Fehler war, antworte auf diese E-Mail.',
+      ],
+    }),
+    es: (p) => ({
+      subject: `Retiramos un video de tu cuenta de ${brand}`,
+      heading: 'Video retirado',
+      paragraphs: [
+        `Tras un reporte (${p.reportId}), retiramos ${p.videos} video(s) hechos con la misma foto y bloqueamos esa foto.`,
+        'Sube solo fotos tuyas o de personas que lo hayan aceptado. Si crees que es un error, responde a este correo.',
+      ],
+    }),
+    fr: (p) => ({
+      subject: `Une vidéo de votre compte ${brand} a été retirée`,
+      heading: 'Vidéo retirée',
+      paragraphs: [
+        `Après un signalement (${p.reportId}), nous avons retiré ${p.videos} vidéo(s) issues de la même photo et bloqué cette photo.`,
+        'N’envoyez que vos photos ou celles de personnes qui ont accepté. Si vous pensez qu’il s’agit d’une erreur, répondez à cet e-mail.',
+      ],
+    }),
+    'pt-BR': (p) => ({
+      subject: `Um vídeo da sua conta ${brand} foi removido`,
+      heading: 'Vídeo removido',
+      paragraphs: [
+        `Depois de uma denúncia (${p.reportId}), removemos ${p.videos} vídeo(s) feitos com a mesma foto e bloqueamos novos envios dessa foto.`,
+        'Envie apenas fotos suas ou de pessoas que autorizaram. Se achar que houve engano, responda a este e-mail.',
+      ],
+    }),
+    'zh-TW': (p) => ({
+      subject: `你在 ${brand} 的影片已被刪除`,
+      heading: '影片已被刪除',
+      paragraphs: [
+        `收到檢舉（${p.reportId}）後，我們刪除了用同一張照片產生的 ${p.videos} 支影片，並禁止這張照片再次上傳。`,
+        '只能上傳你本人或已取得對方同意的照片。如果認為處理有誤，請回覆這封信。',
       ],
     }),
   },
@@ -254,7 +488,7 @@ const ADMIN_RENDERERS: { [K in AdminTemplate]: Render<K> } = {
       paragraphs: [
         `原因：${REASONS_ZH[p.reason] ?? p.reason}`,
         `视频：${p.generationId ?? '未能自动定位，需要人工查找'}`,
-        `截止：${date({ ...ctx, locale: 'zh' }, p.dueAt, true)}`,
+        `截止：${operatorDate(p.dueAt, true)}`,
       ],
       cta: { label: '去处理', url: `${ctx.siteUrl}/admin/takedowns` },
     }

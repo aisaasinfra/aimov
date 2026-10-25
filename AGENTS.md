@@ -29,7 +29,7 @@
 
 ## 文案
 
-- 用户能看到的文案（页面、邮件、错误提示）都要有 `en` 和 `zh` 两份：页面文案在 `src/content/en.ts`、`zh.ts`（`zh` 由 `Content` 类型约束，缺键 typecheck 报错），邮件在 `src/server/email-templates.ts`。组件里不写死字符串。
+- 用户能看到的文案（页面、邮件、错误提示）按 `LOCALES` 六种公开语言各一份：`en`、`de`、`es`、`fr`、`pt-BR`、`zh-TW`（繁体，数组和切换器里排最后）。没有简体站点语言。页面文案在 `src/content/<locale>.ts`（由 `Content` 类型约束，缺键 typecheck 报错），用户邮件在 `src/server/email-templates.ts`。管理员邮件仍是运营用简体，发件箱 `locale` 记为 `zh`，这个值不在 `LOCALES` 里。组件里不写死字符串。
 - 后台 `/admin` 只有中文。
 - 文案里的关键词、品牌、天数等从 `site` 读取，不写死。
 - 不编造评价、使用人数和划线原价：`anchorPriceCents` 只填真实卖过的价格。首页可选区块（`problem`、`withWithout`）设为 `null` 就不渲染。

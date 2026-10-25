@@ -31,7 +31,7 @@ describe('后台提交的运营参数', () => {
   })
 
   it('公告压成一行纯文本；首尾和连续空白不算进长度', () => {
-    expect(parseSettingsPatch({ 'announcement.zh': '  新功能\n上线   了 ', maintenance: true })).toEqual({ 'announcement.zh': '新功能 上线 了', maintenance: true })
+    expect(parseSettingsPatch({ 'announcement.zh-TW': '  新功能\n上线   了 ', maintenance: true })).toEqual({ 'announcement.zh-TW': '新功能 上线 了', maintenance: true })
     expect(parseSettingsPatch({ 'announcement.en': ` ${'x'.repeat(200)}\n\n` })).toEqual({ 'announcement.en': 'x'.repeat(200) })
   })
 

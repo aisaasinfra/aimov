@@ -1,23 +1,32 @@
 import { describe, expect, it } from 'vitest'
+import type { Locale } from '#/config/site'
 import type { ChangelogEntry } from '#/content/changelog'
 import { buildDocMarkdown, buildLlmsFullTxt, buildLlmsTxt, isLlmDocSlug } from '#/server/llms'
 import { isSeoPath, seoRoutes } from '#/server/seo'
+
+function texts<T>(en: T): Record<Locale, T> {
+  return { en, de: en, es: en, fr: en, 'pt-BR': en, 'zh-TW': en }
+}
 
 const hidden: ChangelogEntry = {
   version: 'draft',
   date: '2026-10-26',
   published: false,
-  title: { en: 'Secret title', zh: '秘密标题' },
-  summary: { en: 'hidden', zh: '隐藏' },
-  items: { en: ['do not index'], zh: ['不要索引'] },
+  title: texts('Secret title'),
+  summary: texts('hidden'),
+  items: texts(['do not index']),
 }
 
 describe('llms.txt', () => {
-  it('索引写明视频产品、两种语言、Google 登录和支付通道，并指向全文', () => {
+  it('索引写明六种语言、没有简体、Google 登录和支付通道，并指向全文', () => {
     const text = buildLlmsTxt(['/', '/pricing', '/changelog', '/waitlist'])
     expect(text).toContain('# aimov')
     expect(text).toContain('video SaaS')
-    expect(text).toContain('/zh')
+    expect(text).toContain('/zh-TW')
+    expect(text).toContain('/pt-BR')
+    expect(text).toContain('/de')
+    expect(text).toContain('no Simplified Chinese')
+    expect(text).not.toContain('简体中文, prefix /zh')
     expect(text).toContain('Google only')
     expect(text).toContain('PayPal.cn')
     expect(text).toContain('/llms-full.txt')

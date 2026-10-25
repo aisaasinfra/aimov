@@ -4,7 +4,7 @@
 
 ## 模板现状
 
-已具备：Google 登录、积分包（一次性购买）、积分流水与幂等入账、订单与退款回收、Waffo/Dodo 两个 MoR 支付、生成队列与失败退积分、个人中心、交易邮件、管理后台（用户/订单/生成/举报下架/留言/支付事件/邮件/审计/经营报表）、来源归因（UTM 与广告点击 ID，首次和最近触达）与转化漏斗、上传类型校验、限流、CSRF、中英文、SEO 文章页、法律页、账号注销。
+已具备：Google 登录、积分包（一次性购买）、积分流水与幂等入账、订单与退款回收、Waffo/Dodo 两个 MoR 支付、生成队列与失败退积分、个人中心、交易邮件、管理后台（用户/订单/生成/举报下架/留言/支付事件/邮件/审计/经营报表）、来源归因（UTM 与广告点击 ID，首次和最近触达）与转化漏斗、上传类型校验、限流、CSRF、六种公开语言（en、de、es、fr、pt-BR、zh-TW，没有简体）、SEO 文章页、法律页、账号注销。
 
 P0 已完成（2026-10-20）：AI 可见标识、举报下架、上传图片审核、数据保留、匿名表单的 Turnstile。各项下面的“状态”写明了做到哪一步，用法见 README 的“合规与内容安全”。
 
@@ -211,7 +211,7 @@ P0 已完成（2026-10-20）：AI 可见标识、举报下架、上传图片审�
   - 来源：[Workflows 文档](https://developers.cloudflare.com/workflows/)、[Workflows GA](https://blog.cloudflare.com/workflows-ga-production-ready-durable-execution/)
 - **漏斗分析**：后台 `/admin/reports` 已有“访问 → 注册 → 下单 → 支付 → 首次生成”漏斗，以及按来源的转化表（访问按会话计，注册按首次触达，订单按最近触达）。配置 `site.analytics.ga4Id` 后，还会上报 `sign_up`、`begin_checkout`、`purchase`、`generate_video` 四个 GA4 事件。还缺“复购”这一步和按 cohort 的留存。
 - **后台增强**：订单 CSV 导出、按天/来源/国家/支付商/套餐的收入报表已完成。还缺 webhook 失败重放和批量补偿积分。
-- **多语言**：按热点来源国增加语言，例如 es、pt、ja、ko；语言列表在 `LOCALES`。
+- **多语言**：公开语言是 `en`、`de`、`es`、`fr`、`pt-BR`、`zh-TW`（繁体排最后，没有简体）。再加语言改 `LOCALES`。日语、韩语还没做。
 - **平台限制备忘**：
   - 请求体上限按 Cloudflare 套餐区分：Free/Pro 100MB，Business 200MB。
   - HTTP 请求的 CPU 时间默认 30 秒，最多可调到 5 分钟。

@@ -8,7 +8,11 @@ import type { Content } from '#/content/en'
 // 加载完成后 getContent / useContent 同步可用
 const loaders: Record<Locale, () => Promise<(s: typeof site) => Content>> = {
   en: () => import('#/content/en').then((m) => m.en),
-  zh: () => import('#/content/zh').then((m) => m.zh),
+  de: () => import('#/content/de').then((m) => m.de),
+  es: () => import('#/content/es').then((m) => m.es),
+  fr: () => import('#/content/fr').then((m) => m.fr),
+  'pt-BR': () => import('#/content/pt-BR').then((m) => m.ptBR),
+  'zh-TW': () => import('#/content/zh-TW').then((m) => m.zhTW),
 }
 const cache = new Map<Locale, Content>()
 const pending = new Map<Locale, Promise<Content>>()
@@ -43,7 +47,7 @@ export function localeFromParam(param: string | undefined): Locale {
   return isLocale(param) ? param : DEFAULT_LOCALE
 }
 
-// 默认语言不带前缀：/pricing、/zh/pricing
+// 默认语言不带前缀：/pricing、/de/pricing、/zh-TW/pricing
 export function localeFromPathname(pathname: string): Locale {
   const first = pathname.split('/')[1]
   return isLocale(first) && first !== DEFAULT_LOCALE ? first : DEFAULT_LOCALE

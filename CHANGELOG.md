@@ -4,9 +4,9 @@ Notable changes to the template. Derived sites pick them up with `git merge` fro
 
 中文说明在每条下方。
 
-The in-app page is `/changelog` (English and Chinese). This file stays the repo log.
+The in-app page is `/changelog` (six public locales: en, de, es, fr, pt-BR, zh-TW). This file stays the repo log.
 
-站内页面是 `/changelog`（中英文）。本文件仍是仓库日志。
+站内页面是 `/changelog`（六种公开语言：en、de、es、fr、pt-BR、zh-TW）。本文件仍是仓库日志。
 
 ## 2026-10-25
 

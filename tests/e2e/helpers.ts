@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs'
 import { expect, type APIRequestContext, type APIResponse } from '@playwright/test'
 import { site } from '../../src/config/site'
 import { en } from '../../src/content/en'
-import { zh } from '../../src/content/zh'
+import { zhTW } from '../../src/content/zh-TW'
 
 // 3000 被占用时用 E2E_PORT 换端口（与 playwright.config.ts 一致）
 export const ORIGIN = `http://127.0.0.1:${process.env.E2E_PORT ?? '3000'}`
 export const PHOTO = 'tests/fixtures/photo.jpg'
 
 // 页面文案（站点里按语言懒加载，测试直接调用文案工厂）
-export const content = { en: en(site), zh: zh(site) }
+export const content = { en: en(site), 'zh-TW': zhTW(site) }
 
 export function uniqueEmail(tag: string) {
   return `e2e-${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`

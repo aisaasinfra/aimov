@@ -9,7 +9,7 @@
 //       --name（Worker 与 D1/R2/Queue 前缀，默认 slug）--email（默认 support@<domain>）
 //       --platform（默认不变）--date（站点与文章的 publishedAt/updatedAt，默认今天）
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { site } from '../src/config/site.ts'
 
 const args = process.argv.slice(2)
@@ -175,7 +175,7 @@ if (write) {
 const oldKeyword = site.keyword
 const hardcoded = []
 if (oldKeyword !== keyword) {
-  for (const file of ['src/content/en.ts', 'src/content/zh.ts']) {
+  for (const file of readdirSync('src/content').filter((name) => name.endsWith('.ts') && name !== 'changelog.ts').map((name) => `src/content/${name}`)) {
     readFileSync(file, 'utf8')
       .split('\n')
       .forEach((line, i) => {
@@ -189,8 +189,8 @@ const missingSources = site.durations
 
 console.log(`
 接下来必须人工完成：
-1. 重写趋势专属文案（只换关键词会被判定为模板站）：src/content/en.ts 与 zh.ts 的 hero、whatIs、ideas、faq、guides、articles.trend、articles.howTo。
-   首页正文要自然覆盖长尾词：${secondaryKeywords.join('、')}${hardcoded.length ? `\n   写死旧关键词 "${oldKeyword}" 的行：${hardcoded.join(', ')}` : ''}${extraArticles.length ? `\n   旧站的其他文章（${extraArticles.join('、')}）：重写，或从 site.articles 和两份文案里删掉` : ''}
+1. 重写趋势专属文案（只换关键词会被判定为模板站）：src/content 下每种公开语言（en、de、es、fr、pt-BR、zh-TW）的 hero、whatIs、ideas、faq、guides、articles.trend、articles.howTo。没有简体 zh.ts。
+   首页正文要自然覆盖长尾词：${secondaryKeywords.join('、')}${hardcoded.length ? `\n   写死旧关键词 "${oldKeyword}" 的行：${hardcoded.join(', ')}` : ''}${extraArticles.length ? `\n   旧站的其他文章（${extraArticles.join('、')}）：重写，或从 site.articles 和各语言文案里删掉` : ''}
 2. 换素材：public/demo/*（自有或已授权，并在 site.examples.*.credit 写来源）、public/og.png（1200×630）、public/favicon.svg。
    生成用源视频${missingSources.length ? `（缺 ${missingSources.length} 个）` : ''}：${site.durations.map((d) => `seed/templates/${d.source.split(oldTemplateId).join(templateId)}`).join('、')}
 3. Cloudflare 资源（把 database_id、KV id 写回 wrangler.jsonc）：

@@ -110,8 +110,8 @@ test('维护模式：新生成和下单返回 503，已建订单的支付回调�
 
   await page.goto('/')
   await expect(page.getByTestId('maintenance-notice')).toHaveText(content.en.common.maintenance)
-  await page.goto('/zh')
-  await expect(page.getByTestId('maintenance-notice')).toHaveText(content.zh.common.maintenance)
+  await page.goto('/zh-TW')
+  await expect(page.getByTestId('maintenance-notice')).toHaveText(content['zh-TW'].common.maintenance)
 
   await setSettings({ maintenance: false })
   await json(generate(request, uploadId), 201)
@@ -121,13 +121,13 @@ test('维护模式：新生成和下单返回 503，已建订单的支付回调�
 })
 
 test('全站公告按语言显示，提交时压成一行；清空后不显示', async ({ page }) => {
-  const view = await setSettings({ 'announcement.en': 'Spring sale: 20% off', 'announcement.zh': '  春季\n特惠   八折 ' })
-  expect(view.values['announcement.zh']).toBe('春季 特惠 八折')
+  const view = await setSettings({ 'announcement.en': 'Spring sale: 20% off', 'announcement.zh-TW': '  春季\n特惠   八折 ' })
+  expect(view.values['announcement.zh-TW']).toBe('春季 特惠 八折')
 
   await page.goto('/')
   await expect(page.getByTestId('site-announcement')).toHaveText('Spring sale: 20% off')
   await expect(page.getByTestId('maintenance-notice')).toHaveCount(0)
-  await page.goto('/zh')
+  await page.goto('/zh-TW')
   await expect(page.getByTestId('site-announcement')).toHaveText('春季 特惠 八折')
 
   await setSettings({ 'announcement.en': '' })
