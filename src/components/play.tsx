@@ -5,6 +5,7 @@ import { findVideoTemplate, site, type VideoTemplate } from '#/config/site'
 import { api, errorCode, isActiveGeneration, type Generation } from '#/lib/api'
 import { track } from '#/lib/attribution'
 import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
+import { playRequestPlan } from '#/lib/play-request'
 import { signInHref, useSession } from '#/lib/session'
 
 type Photo = { file: File; previewUrl: string; uploadId: string | null }
@@ -196,20 +197,34 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   }
 
   function requestCreate() {
-    if (loading || busy) return
-    if (!user) {
+    const plan = playRequestPlan({
+      loading,
+      busy,
+      signedIn: !!user,
+      shortfall,
+      hasPhoto: !!photo,
+      consent,
+    })
+    if (plan === 'wait') return
+    if (plan === 'sign-in') {
       location.href = signInHref(config, pathname, lp('/sign-in'))
       return
     }
-    if (shortfall > 0) {
+    if (plan === 'pricing') {
       location.href = lp('/pricing')
       return
     }
-    if (!photo) {
+    if (plan === 'pick-file') {
       openFile()
       return
     }
-    if (!consent) return
+    if (plan === 'need-consent') {
+      // The checkbox sits in the hero. The sticky bar is the control the visitor can see.
+      const box = document.getElementById('consent')
+      box?.scrollIntoView({ block: 'center' })
+      if (box instanceof HTMLElement) box.focus()
+      return
+    }
     void generate()
   }
 
@@ -314,6 +329,8 @@ export function SceneCoverflow() {
         onKeyDown={onKeyDown}
         onPointerDown={(event) => {
           if (event.pointerType === 'mouse' && event.button !== 0) return
+          // A swipe that never produces a click used to leave this set, so the next tap was ignored.
+          dragged.current = false
           drag.current = { x: event.clientX, pointerId: event.pointerId }
         }}
         onPointerUp={(event) => {
