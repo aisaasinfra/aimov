@@ -15,7 +15,7 @@ export function Generator() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { user, config, loading } = useSession()
   const play = usePlay()
-  const { duration, photo, uploading, dragging, busy, consent, shortfall, error, generation } = play
+  const { photo, uploading, dragging, busy, consent, shortfall, error, generation } = play
   const world = templateCopy(playCopy.templates, play.template.id)
 
   return (
@@ -125,11 +125,12 @@ export function Generator() {
               <span className="play-selected-name">{world.name}</span>
             </span>
           </div>
-          <p className="text-center text-xs text-muted">
-            {world.name} · {playCopy.seconds(duration.seconds)}
-            {user ? ` · ${g.balance(user.credits)}` : ''}
-            {user && shortfall > 0 ? ` · ${g.needMore(shortfall)}` : ''}
-          </p>
+          {user ? (
+            <p className="text-center text-xs text-muted">
+              {g.balance(user.credits)}
+              {shortfall > 0 ? ` · ${g.needMore(shortfall)}` : ''}
+            </p>
+          ) : null}
           {user && photo && !consent && !generation ? <p className="text-center text-xs text-muted">{g.needConsent}</p> : null}
           <ErrorText code={error} />
         </div>
