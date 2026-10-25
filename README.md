@@ -33,6 +33,8 @@ Release notes: [CHANGELOG.md](CHANGELOG.md). Feature notes and plans: [docs/SAAS
 
 ## Local development
 
+Step-by-step local run: [docs/local-deploy.zh-CN.md](docs/local-deploy.zh-CN.md) (Chinese).
+
 ```bash
 npm install
 cp .dev.vars.example .dev.vars       # set at least SESSION_SECRET
