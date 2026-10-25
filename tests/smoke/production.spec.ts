@@ -46,7 +46,7 @@ test('sitemap 里的页面全部可打开，没有脚本错误', async ({ page, 
 
 for (const [locale, scheme] of [
   ['en', 'light'],
-  ['zh', 'dark'],
+  ['zh-TW', 'dark'],
 ] as const) {
   test(`首页（${locale}，${scheme}）水合完成、导航可用`, async ({ page }, testInfo) => {
     const errors = watchErrors(page)
@@ -54,7 +54,7 @@ for (const [locale, scheme] of [
     await page.goto(locale === 'en' ? '/' : `/${locale}`)
     // 未登录时生成器显示注册按钮：出现即说明已水合、会话接口可用
     await expect(page.getByTestId('generator-sign-up')).toBeVisible()
-    await expect(page.locator('html')).toHaveAttribute('lang', locale === 'en' ? 'en' : /^zh/)
+    await expect(page.locator('html')).toHaveAttribute('lang', locale === 'en' ? 'en' : 'zh-TW')
     await page.getByTestId('nav-sign-in').click()
     await expect(page).toHaveURL(/\/sign-in$/)
     // 会话配置加载完（出现 Google 按钮或“未配置”提示）后，不应有开发登录表单
@@ -98,7 +98,7 @@ test('开发与 mock 入口全部关闭：同源 POST 也是 404，页面也打�
     const res = await request.post(path, { data: {}, headers: { origin: ORIGIN } })
     if (res.status() !== 404) wrong.push(`POST ${path} → ${res.status()}`)
   }
-  for (const path of ['/api/dev/emails', '/checkout/mock', '/zh/checkout/mock', '/checkout/mock?order=x']) {
+  for (const path of ['/api/dev/emails', '/checkout/mock', '/zh-TW/checkout/mock', '/checkout/mock?order=x']) {
     const res = await request.get(path, { maxRedirects: 0 })
     if (res.status() !== 404) wrong.push(`GET ${path} → ${res.status()}`)
   }

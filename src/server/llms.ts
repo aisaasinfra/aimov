@@ -1,6 +1,6 @@
 // 给 LLM 爬虫的纯文本：llms.txt 是索引，llms-full.txt 和 /docs-md/* 是去掉站点外壳的 Markdown。
 // 内容来自站点配置和 content/changelog.ts，不读文件系统（Workers 上没有）。
-import { LOCALES, localePath, site } from '#/config/site'
+import { LOCALES, localePath, site, type Locale } from '#/config/site'
 import { CHANGELOG, selectChangelog, type ChangelogEntry } from '#/content/changelog'
 import { absoluteUrl } from '#/lib/i18n'
 
@@ -11,7 +11,7 @@ const PATH_BLURB: Record<string, string> = {
   '/': 'Home: one photo into a vertical holiday video',
   '/pricing': 'Credit packs and plans',
   '/guides': 'Guides',
-  '/changelog': 'In-app changelog in English and Chinese',
+  '/changelog': 'In-app changelog in six locales',
   '/waitlist': 'Public email waitlist; does not create an account',
   '/contact': 'Contact the team (not the product feedback box)',
   '/report': 'Report a video or request removal',
@@ -28,21 +28,36 @@ export function llmRobotsLines() {
   return [`# llms.txt: ${absoluteUrl('/llms.txt')}`, `# llms-full.txt: ${absoluteUrl('/llms-full.txt')}`]
 }
 
+const LOCALE_NOTE: Record<Locale, string> = {
+  en: 'default, no URL prefix, x-default',
+  de: 'German, prefix /de',
+  es: 'Spanish, prefix /es',
+  fr: 'French, prefix /fr',
+  'pt-BR': 'Brazilian Portuguese, prefix /pt-BR',
+  'zh-TW': 'Traditional Chinese, prefix /zh-TW, listed last',
+}
+
 function label(path: string) {
   return PATH_BLURB[path] ?? 'Guide'
+}
+
+function alternateLine(path: string) {
+  return LOCALES.filter((locale) => locale !== 'en')
+    .map((locale) => `${locale} ${absoluteUrl(localePath(locale, path))}`)
+    .join('; ')
 }
 
 export function buildLlmsTxt(paths: readonly string[]) {
   const lines = [
     `# ${site.brandName}`,
     '',
-    `> ${site.brandName} is a video SaaS. Upload one photo, pick a ${site.keyword} template, and download a vertical MP4. English is the default locale and has no URL prefix. Simplified Chinese is under /zh. Sign-in is Google only.`,
+    `> ${site.brandName} is a video SaaS. Upload one photo, pick a ${site.keyword} template, and download a vertical MP4. English is the default locale and has no URL prefix. Other public locales are de, es, fr, pt-BR, and zh-TW (Traditional Chinese, last). There is no Simplified Chinese locale. Sign-in is Google only.`,
     '',
     '## Public pages',
-    ...paths.map((path) => `- [${path === '/' ? 'Home' : path}](${absoluteUrl(path)}) — ${label(path)}. Chinese: ${absoluteUrl(localePath('zh', path))}`),
+    ...paths.map((path) => `- [${path === '/' ? 'Home' : path}](${absoluteUrl(path)}) — ${label(path)}. Also: ${alternateLine(path)}`),
     '',
     '## Locales',
-    ...LOCALES.map((locale) => `- ${locale}${locale === 'en' ? ' (default, x-default)' : ' (简体中文, prefix /zh)'}`),
+    ...LOCALES.map((locale) => `- ${locale} (${LOCALE_NOTE[locale]})`),
     '',
     '## For AI agents',
     `- Full corpus: ${absoluteUrl('/llms-full.txt')}`,
@@ -78,7 +93,7 @@ export function buildDocMarkdown(slug: string, entries: readonly ChangelogEntry[
     return [
       `# ${site.brandName}`,
       '',
-      `${site.brandName} (${site.domain}) turns one photo into a ${site.keyword}. The download is an MP4. Locales: English at ${absoluteUrl('/')} and 简体中文 at ${absoluteUrl('/zh')}.`,
+      `${site.brandName} (${site.domain}) turns one photo into a ${site.keyword}. The download is an MP4. Locales, in switcher order: ${LOCALES.map((locale) => `${locale} at ${absoluteUrl(localePath(locale, '/'))}`).join('; ')}. There is no Simplified Chinese (zh-CN) locale.`,
       '',
       'Sign-in is Google only. Credits pay for render seconds. Failed renders refund credits. Photos and finished videos are private until the owner shares a video.',
       '',
@@ -95,7 +110,7 @@ export function buildDocMarkdown(slug: string, entries: readonly ChangelogEntry[
       '',
       `${site.brandName} sells credits for ${site.keyword} renders. Pack credits do not expire. Where subscriptions are enabled, plan credits are granted each period and PayPal is not used for plans.`,
       '',
-      `Page: ${absoluteUrl('/pricing')} and ${absoluteUrl('/zh/pricing')}.`,
+      `Pages: ${LOCALES.map((locale) => absoluteUrl(localePath(locale, '/pricing'))).join(', ')}.`,
       '',
       'Configured checkout channels depend on the deployment (Waffo, PayPal.cn, Dodo, Stripe). The product does not require Stripe.',
       '',
@@ -105,13 +120,13 @@ export function buildDocMarkdown(slug: string, entries: readonly ChangelogEntry[
     return [
       `# ${site.brandName} waitlist`,
       '',
-      `Anyone can leave an email at ${absoluteUrl('/waitlist')} (Chinese: ${absoluteUrl('/zh/waitlist')}). Joining does not create an account and does not replace Google sign-in.`,
+      `Anyone can leave an email at ${LOCALES.map((locale) => absoluteUrl(localePath(locale, '/waitlist'))).join(', ')}. Joining does not create an account and does not replace Google sign-in.`,
       '',
       'When Turnstile is configured, the form requires a token. Duplicate emails are accepted as already listed. Admins can export the list as CSV.',
       '',
     ].join('\n')
   }
-  return [`# ${site.brandName} changelog`, '', `Page: ${absoluteUrl('/changelog')} and ${absoluteUrl('/zh/changelog')}.`, '', changelogMarkdown(entries), ''].join('\n')
+  return [`# ${site.brandName} changelog`, '', `Pages: ${LOCALES.map((locale) => absoluteUrl(localePath(locale, '/changelog'))).join(', ')}.`, '', changelogMarkdown(entries), ''].join('\n')
 }
 
 export function buildLlmsFullTxt(paths: readonly string[], entries: readonly ChangelogEntry[] = CHANGELOG) {

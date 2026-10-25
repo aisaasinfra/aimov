@@ -27,8 +27,8 @@ test('登录后的跳转只落在站内：恶意 redirect 回退到个人中心�
     await expect(page).toHaveURL(`${ORIGIN}/dashboard`)
   }
 
-  await page.goto(`/sign-in?redirect=${encodeURIComponent('/zh/pricing?ref=sign-in#faq')}`)
-  await expect(page).toHaveURL(`${ORIGIN}/zh/pricing?ref=sign-in#faq`)
+  await page.goto(`/sign-in?redirect=${encodeURIComponent('/zh-TW/pricing?ref=sign-in#faq')}`)
+  await expect(page).toHaveURL(`${ORIGIN}/zh-TW/pricing?ref=sign-in#faq`)
 
   await testInfo.attach('offsite-and-errors', { body: JSON.stringify({ offsite, pageErrors }, null, 2), contentType: 'application/json' })
   expect(offsite).toEqual([])

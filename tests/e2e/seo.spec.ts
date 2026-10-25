@@ -4,7 +4,8 @@ import { ARTICLES, LOCALE_META, articlePath, site } from '../../src/config/site'
 import { runSeoCheck } from '../../scripts/seo-check.mjs'
 import { ORIGIN, content } from './helpers'
 
-const { en, zh } = content
+const { en } = content
+const zh = content['zh-TW']
 
 async function headSnapshot(page: Page) {
   return page.evaluate(() => ({
@@ -23,11 +24,11 @@ test('SSR 输出满足 seo-check 全部 error 级规则', async ({}, testInfo) =
   const result = await runSeoCheck({ base: ORIGIN })
   await testInfo.attach('seo-check.json', { body: JSON.stringify(result, null, 2), contentType: 'application/json' })
   expect(result.findings.filter((f) => f.level === 'error')).toEqual([])
-  // 8 个固定公开页（含 /guides）+ 每篇文章，中英各一份
-  expect(result.pages.length).toBeGreaterThanOrEqual(2 * (8 + ARTICLES.length))
+  // 8 个固定公开页（含 /guides）+ 每篇文章，六种语言各一份
+  expect(result.pages.length).toBeGreaterThanOrEqual(6 * (8 + ARTICLES.length))
 })
 
-test('中英文首页水合无报错，H1/标题与 SSR 一致', async ({ page }, testInfo) => {
+test('英文和繁体首页水合无报错，H1/标题与 SSR 一致', async ({ page }, testInfo) => {
   const problems: string[] = []
   page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
   page.on('console', (message) => {
@@ -36,7 +37,7 @@ test('中英文首页水合无报错，H1/标题与 SSR 一致', async ({ page }
 
   for (const [path, content] of [
     ['/', en],
-    ['/zh', zh],
+    ['/zh-TW', zh],
   ] as const) {
     await page.goto(path)
     // 生成器里的登录按钮在会话加载后才出现，可作为"已水合"的信号
@@ -47,7 +48,7 @@ test('中英文首页水合无报错，H1/标题与 SSR 一致', async ({ page }
     await expect(page.getByRole('heading', { level: 2, name: content.howTo.title })).toBeVisible()
     await expect(page.getByRole('heading', { level: 2, name: content.whatIs.title })).toBeVisible()
   }
-  await testInfo.attach('home-zh', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
+  await testInfo.attach('home-zh-TW', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
   expect(problems).toEqual([])
 })
 
@@ -85,7 +86,7 @@ test('语言链接：SSR 中可抓取，点击后保留路径、查询参数和 
   // 不执行 JS 的 HTML 里就有指向另一语言同一页面的链接
   const html = await (await request.get(`${path}?ref=e2e`)).text()
   // HTML 属性名不区分大小写，React 输出的是 hrefLang
-  expect(html).toMatch(new RegExp(`<a href="/zh${path}\\?ref=e2e" hreflang="zh"`, 'i'))
+  expect(html).toMatch(new RegExp(`<a href="/zh-TW${path}\\?ref=e2e" hreflang="zh-TW"`, 'i'))
 
   await page.goto(`${path}?ref=e2e#step-2`)
   await expect(page.getByTestId('nav-sign-in')).toBeVisible()
@@ -93,12 +94,12 @@ test('语言链接：SSR 中可抓取，点击后保留路径、查询参数和 
   // 顶部下拉：Esc 关闭
   const header = page.getByRole('banner')
   await header.getByRole('button', { name: en.nav.language }).click()
-  await expect(header.getByRole('link', { name: LOCALE_META.zh.name })).toBeVisible()
+  await expect(header.getByRole('link', { name: LOCALE_META['zh-TW'].name })).toBeVisible()
   await page.keyboard.press('Escape')
-  await expect(header.getByRole('link', { name: LOCALE_META.zh.name })).toHaveCount(0)
+  await expect(header.getByRole('link', { name: LOCALE_META['zh-TW'].name })).toHaveCount(0)
 
-  await page.getByRole('contentinfo').getByRole('navigation', { name: en.nav.language }).getByRole('link', { name: LOCALE_META.zh.name }).click()
-  await expect(page).toHaveURL(new RegExp(`/zh${path}\\?ref=e2e#step-2$`))
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  await page.getByRole('contentinfo').getByRole('navigation', { name: en.nav.language }).getByRole('link', { name: LOCALE_META['zh-TW'].name }).click()
+  await expect(page).toHaveURL(new RegExp(`/zh-TW${path}\\?ref=e2e#step-2$`))
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
   await expect(page.locator('h1')).toHaveText(zh.articles.howTo.title)
 })

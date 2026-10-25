@@ -1,15 +1,22 @@
 // 上新词时主要改这个文件：关键词、品牌、模板视频、时长档位、积分包、文章 slug。
 // 文案在 src/content/<locale>.ts，通过 {keyword} 等变量自动套用。
 
-export const LOCALES = ['en', 'zh'] as const
+// 公开站点语言。顺序即切换器、hreflang 和 sitemap alternate 的顺序。zh-TW 必须排在最后。
+// 没有简体中文：不要把 zh / zh-CN 加回这个数组。
+// pt-BR、zh-TW 带连字符。路由 `{-$locale}` 捕获一整段路径，`-` 不会被 encodeURIComponent 转义，可以当键。
+export const LOCALES = ['en', 'de', 'es', 'fr', 'pt-BR', 'zh-TW'] as const
 export type Locale = (typeof LOCALES)[number]
 export const DEFAULT_LOCALE: Locale = 'en'
 
-// 每种语言的 BCP 47 标签（<html lang>、日期格式、Turnstile）、og:locale 和切换器里显示的自称。
-// 加语言时在这里补一行，并在 src/lib/i18n.ts 的 loaders 里登记文案文件
+// tag：<html lang>、日期、Turnstile。ogLocale：Open Graph。name：切换器里的自称。
+// 支付页区域默认值不写在这里：PayPal 用 de-DE / es-ES / fr-FR / en-US / pt-BR / zh-TW（见 payments/paypal.ts）。
 export const LOCALE_META: Record<Locale, { tag: string; ogLocale: string; name: string }> = {
   en: { tag: 'en', ogLocale: 'en_US', name: 'English' },
-  zh: { tag: 'zh-CN', ogLocale: 'zh_CN', name: '简体中文' },
+  de: { tag: 'de', ogLocale: 'de_DE', name: 'Deutsch' },
+  es: { tag: 'es', ogLocale: 'es_ES', name: 'Español' },
+  fr: { tag: 'fr', ogLocale: 'fr_FR', name: 'Français' },
+  'pt-BR': { tag: 'pt-BR', ogLocale: 'pt_BR', name: 'Português (Brasil)' },
+  'zh-TW': { tag: 'zh-TW', ogLocale: 'zh_TW', name: '繁體中文' },
 }
 
 export const site = {
@@ -89,84 +96,84 @@ export const site = {
       poster: '/merry-us/worlds/new-york.webp',
       thumb: '/merry-us/worlds/new-york-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in New York: ice skating beneath a lit Christmas tree and a glowing tower. Snow and warm lights.',
-      promptZh: '两个人在纽约的圣诞 3D 画面里：在点亮的圣诞树和高楼前滑冰。雪和暖光。',
+      promptZh: '兩個人在紐約的聖誕 3D 畫面裡：在點亮的聖誕樹和高樓前滑冰。雪和暖光。',
     },
     {
       id: 'quebec-city',
       poster: '/merry-us/worlds/quebec-city.webp',
       thumb: '/merry-us/worlds/quebec-city-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Québec City: a snowy old-town street, castle hill, and wreaths in the windows. Snow and warm lights.',
-      promptZh: '两个人在魁北克城的圣诞 3D 画面里：雪中的老城街道、城堡山，窗边挂着花环。雪和暖光。',
+      promptZh: '兩個人在魁北克城的聖誕 3D 畫面裡：雪中的老城街道、城堡山，窗邊掛著花環。雪和暖光。',
     },
     {
       id: 'paris',
       poster: '/merry-us/worlds/paris.webp',
       thumb: '/merry-us/worlds/paris-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Paris: walking by the Eiffel Tower and a carousel in the snow. Snow and warm lights.',
-      promptZh: '两个人在巴黎的圣诞 3D 画面里：在雪中的埃菲尔铁塔和旋转木马旁散步。雪和暖光。',
+      promptZh: '兩個人在巴黎的聖誕 3D 畫面裡：在雪中的艾菲爾鐵塔和旋轉木馬旁散步。雪和暖光。',
     },
     {
       id: 'rovaniemi',
       poster: '/merry-us/worlds/rovaniemi.webp',
       thumb: '/merry-us/worlds/rovaniemi-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Rovaniemi, Santa Village: reindeer lights, pine cabins, and a polar evening sky. Snow and warm lights.',
-      promptZh: '两个人在罗瓦涅米圣诞老人村的圣诞 3D 画面里：驯鹿灯、松木小屋，和极地的夜空。雪和暖光。',
+      promptZh: '兩個人在羅瓦涅米聖誕老人村的聖誕 3D 畫面裡：馴鹿燈、松木小屋，和極地的夜空。雪和暖光。',
     },
     {
       id: 'london',
       poster: '/merry-us/worlds/london.webp',
       thumb: '/merry-us/worlds/london-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in London: a snowy street, red buses, wreaths, and warm shop windows. Snow and warm lights.',
-      promptZh: '两个人在伦敦的圣诞 3D 画面里：下雪的街道、红色巴士、花环和暖色的橱窗。雪和暖光。',
+      promptZh: '兩個人在倫敦的聖誕 3D 畫面裡：下雪的街道、紅色巴士、花環和暖色的櫥窗。雪和暖光。',
     },
     {
       id: 'prague',
       poster: '/merry-us/worlds/prague.webp',
       thumb: '/merry-us/worlds/prague-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Prague: a snowy square, spires, and wooden market stalls. Snow and warm lights.',
-      promptZh: '两个人在布拉格的圣诞 3D 画面里：下雪的广场、尖塔，和木制市集摊位。雪和暖光。',
+      promptZh: '兩個人在布拉格的聖誕 3D 畫面裡：下雪的廣場、尖塔，和木製市集攤位。雪和暖光。',
     },
     {
       id: 'vienna',
       poster: '/merry-us/worlds/vienna.webp',
       thumb: '/merry-us/worlds/vienna-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Vienna: a palace Christmas market and a glowing carousel. Snow and warm lights.',
-      promptZh: '两个人在维也纳的圣诞 3D 画面里：宫殿旁的圣诞市集，和发光的旋转木马。雪和暖光。',
+      promptZh: '兩個人在維也納的聖誕 3D 畫面裡：宮殿旁的聖誕市集，和發光的旋轉木馬。雪和暖光。',
     },
     {
       id: 'colmar',
       poster: '/merry-us/worlds/colmar.webp',
       thumb: '/merry-us/worlds/colmar-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Colmar: colorful houses and canal lights in the snow. Snow and warm lights.',
-      promptZh: '两个人在科尔马的圣诞 3D 画面里：彩色房子，雪夜里的运河灯光。雪和暖光。',
+      promptZh: '兩個人在科爾馬的聖誕 3D 畫面裡：彩色房子，雪夜裡的運河燈光。雪和暖光。',
     },
     {
       id: 'tromso',
       poster: '/merry-us/worlds/tromso.webp',
       thumb: '/merry-us/worlds/tromso-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Tromsø: polar night, wooden houses, and a green aurora. Snow and warm lights.',
-      promptZh: '两个人在特罗姆瑟的圣诞 3D 画面里：极夜、木屋，和绿色的极光。雪和暖光。',
+      promptZh: '兩個人在特羅姆瑟的聖誕 3D 畫面裡：極夜、木屋，和綠色的極光。雪和暖光。',
     },
     {
       id: 'zermatt',
       poster: '/merry-us/worlds/zermatt.webp',
       thumb: '/merry-us/worlds/zermatt-thumb.webp',
       prompt: 'Two people sharing a festive 3D Christmas moment in Zermatt: the Matterhorn, wooden chalets, and fresh snow. Snow and warm lights.',
-      promptZh: '两个人在采尔马特的圣诞 3D 画面里：马特洪峰、木屋，和新雪。雪和暖光。',
+      promptZh: '兩個人在策馬特的聖誕 3D 畫面裡：馬特洪峰、木屋，和新雪。雪和暖光。',
     },
     {
       id: 'ornament',
       poster: '/merry-us/worlds/people-snowglobe.webp',
       thumb: '/merry-us/worlds/people-snowglobe-thumb.webp',
       prompt: 'A couple embracing inside a glowing Christmas snow globe, a lit village and pines behind the glass, gilded base, warm 3D scene.',
-      promptZh: '一对人拥抱在发光的圣诞雪景球里，玻璃后面是亮着灯的小镇和松树，金色底座，温暖的 3D 画面。',
+      promptZh: '一對人擁抱在發光的聖誕雪景球裡，玻璃後面是亮著燈的小鎮和松樹，金色底座，溫暖的 3D 畫面。',
     },
     {
       id: 'village',
       poster: '/merry-us/worlds/people-village.webp',
       thumb: '/merry-us/worlds/people-village-thumb.webp',
       prompt: 'A couple on a snowy Christmas village street, cottages with glowing windows, pines and a small bridge, gentle 3D illustration.',
-      promptZh: '一对人走在下雪的圣诞小镇街上，小屋窗里有光，松树和一座小桥，轻柔的 3D 画面。',
+      promptZh: '一對人走在下雪的聖誕小鎮街上，小屋窗裡有光，松樹和一座小橋，輕柔的 3D 畫面。',
     },
   ],
 
@@ -222,7 +229,7 @@ export const site = {
     enabled: true,
   },
 
-  // SEO 文章（指南），按展示顺序排列。slug 是根路径：/<slug> 与 /zh/<slug>；正文在 src/content/<locale>.ts 的 articles[key]。
+  // SEO 文章（指南），按展示顺序排列。slug 是根路径：/<slug>，其他语言加前缀（/de/<slug>、/zh-TW/<slug>）。正文在 src/content/<locale>.ts 的 articles[key]。
   // 新增文章：这里加一项，各语言 content 的 articles 补同名 key（缺了 typecheck 会报错）。
   // trend、howTo 两篇被首页直接链接，不要删。related 不填时推荐其余文章里最近更新的。
   // 日期写进 Article 的 datePublished/dateModified、页面上的“最后更新”和 sitemap lastmod，改正文时同步改 updatedAt
@@ -288,9 +295,20 @@ export function findVideoTemplate(id: string) {
   return site.videoTemplates.find((template) => template.id === id)
 }
 
-// 生成时把所选 3D 世界写进 prompt。中文界面用中文描述，其余用英文。
+// promptZh 是繁体（zh-TW / zh-HK / zh-Hant）。简体标签（zh-CN、zh-Hans、zh-SG）和光秃的 zh 用英文 prompt，避免把已下线的简体当成首选。
 export function templatePrompt(template: VideoTemplate, locale: string | undefined) {
-  return locale?.toLowerCase().startsWith('zh') ? template.promptZh : template.prompt
+  return usesTraditionalPrompt(locale) ? template.promptZh : template.prompt
+}
+
+export function usesTraditionalPrompt(locale: string | undefined) {
+  const value = locale?.trim().toLowerCase() ?? ''
+  if (!value.startsWith('zh')) return false
+  const parts = value.split('-')
+  if (parts[0] !== 'zh') return false
+  const script = parts.find((part) => part === 'hant' || part === 'hans')
+  const region = parts.find((part) => part === 'tw' || part === 'hk' || part === 'mo' || part === 'cn' || part === 'sg')
+  if (script === 'hans' || region === 'cn' || region === 'sg') return false
+  return script === 'hant' || region === 'tw' || region === 'hk' || region === 'mo'
 }
 
 export function findPackage(id: string) {

@@ -158,7 +158,7 @@ test('未登录回到结果页：提示登录，不无限转圈；支付商回�
   // 服务端先 302（页面、统计和浏览器历史都拿不到邮箱）；带语言前缀的结果页同样处理
   for (const [from, to] of [
     ['/checkout/success?email=buyer%40example.com&order=ord_signed_out&status=succeeded', '/checkout/success?order=ord_signed_out'],
-    ['/zh/checkout/success?order=ord_a%26b&email=buyer%40example.com', '/zh/checkout/success?order=ord_a%26b'],
+    ['/zh-TW/checkout/success?order=ord_a%26b&email=buyer%40example.com', '/zh-TW/checkout/success?order=ord_a%26b'],
   ]) {
     const res = await page.request.get(from!, { maxRedirects: 0 })
     expect(res.status()).toBe(302)

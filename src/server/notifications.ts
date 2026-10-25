@@ -28,9 +28,11 @@ async function activeUser(env: Env, userId: string) {
   return env.DB.prepare(`SELECT id, email, locale FROM users WHERE id = ? AND status = 'active'`).bind(userId).first<Recipient>()
 }
 
-// 每个管理员一封（固定中文），key 加上收件人
+// 每个管理员一封。locale 记为 'zh' 只是运营信箱标记（简体文案，后台用），不是公开站点语言。
+export const OPERATOR_EMAIL_LOCALE = 'zh'
+
 export function adminAlerts(env: Env, key: string, build: (to: string) => Omit<OutgoingEmail, 'key' | 'to'>) {
-  return adminEmails(env).map((to) => ({ ...build(to), key: `${key}:${to}`, to, locale: 'zh' }) as OutgoingEmail)
+  return adminEmails(env).map((to) => ({ ...build(to), key: `${key}:${to}`, to, locale: OPERATOR_EMAIL_LOCALE }) as OutgoingEmail)
 }
 
 export function notifyGenerationFinished(env: Env, generationId: string) {

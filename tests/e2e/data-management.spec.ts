@@ -51,8 +51,8 @@ test('用户账单与订单详情：实付与部分退款展示，他人订单�
   await expect(page.getByText(t.order.mockNote)).toBeVisible()
 
   // 中文路由同样可用
-  await page.goto(`/zh/dashboard/orders/${orderId}`)
-  await expect(page.getByRole('heading', { name: content.zh.billing.order.title })).toBeVisible()
+  await page.goto(`/zh-TW/dashboard/orders/${orderId}`)
+  await expect(page.getByRole('heading', { name: content['zh-TW'].billing.order.title })).toBeVisible()
 
   // 其他用户：用户接口 404、后台接口 403，页面显示找不到
   const other = await playwright.request.newContext({ baseURL: ORIGIN })

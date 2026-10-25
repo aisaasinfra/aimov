@@ -24,7 +24,16 @@ const CERT_PATH = /^\/v1\/notifications\/certs\/CERT-[A-Za-z0-9-]{1,128}$/
 const APPROVAL_HOST = /^(?:[a-z0-9-]+\.)*paypal\.(?:com|cn)$/i
 const PAYPAL_AMOUNT = /^(0|[1-9]\d*)\.(\d{2})$/
 
-const LOCALE_TAGS: Record<string, string> = { en: 'en-US', zh: 'zh-CN' }
+// 路径第一段是站点语言键。区域默认：德语 de-DE、西班牙语 es-ES、法语 fr-FR、英语 en-US。
+// pt-BR 与 zh-TW 本身就是区域标签。没有简体，zh / zh-CN 不会出现在这张表里。
+export const PAYPAL_LOCALE_TAGS: Record<string, string> = {
+  en: 'en-US',
+  de: 'de-DE',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  'pt-BR': 'pt-BR',
+  'zh-TW': 'zh-TW',
+}
 
 type CertFetcher = (url: string) => Promise<string | undefined>
 
@@ -541,7 +550,7 @@ function paypalLocale(successUrl: string) {
   try {
     const path = new URL(successUrl).pathname
     const base = path.split('/').filter(Boolean)[0]
-    return LOCALE_TAGS[base ?? ''] ?? 'en-US'
+    return PAYPAL_LOCALE_TAGS[base ?? ''] ?? 'en-US'
   } catch {
     return 'en-US'
   }

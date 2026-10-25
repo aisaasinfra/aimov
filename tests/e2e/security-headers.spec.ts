@@ -26,7 +26,7 @@ async function watch(page: Page) {
 
 test('页面下发 CSP Report-Only 和 Permissions-Policy，内联脚本都带本次请求的 nonce；API 不带 CSP', async ({ request }, testInfo) => {
   const nonces: string[] = []
-  for (const path of ['/', '/zh', articlePath('trend')]) {
+  for (const path of ['/', '/zh-TW', articlePath('trend')]) {
     const res = await request.get(path)
     expect(res.status()).toBe(200)
     const headers = res.headers()
@@ -59,7 +59,7 @@ test('页面下发 CSP Report-Only 和 Permissions-Policy，内联脚本都带�
 test('公开页、登录后生成和后台都没有 CSP 违规与水合错误；不带 nonce 的注入脚本会被报告', async ({ page }, testInfo) => {
   const { violations, problems } = await watch(page)
 
-  for (const path of ['/', '/zh', '/pricing', '/guides', articlePath('howTo'), '/sign-in', '/contact', '/report', '/privacy-policy']) {
+  for (const path of ['/', '/zh-TW', '/pricing', '/guides', articlePath('howTo'), '/sign-in', '/contact', '/report', '/privacy-policy']) {
     await page.goto(path)
     await page.waitForLoadState('networkidle')
   }

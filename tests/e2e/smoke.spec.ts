@@ -65,17 +65,17 @@ test('新用户：登录 → 购买 → 生成 → 个人中心看到视频与�
   ])
 })
 
-test('中文站：购买流程全程保持 /zh 前缀', async ({ page }) => {
-  await page.goto('/zh/sign-in')
-  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
-  await page.getByTestId('dev-email').fill(uniqueEmail('zh'))
+test('繁体中文站：购买流程全程保持 /zh-TW 前缀', async ({ page }) => {
+  await page.goto('/zh-TW/sign-in')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-TW')
+  await page.getByTestId('dev-email').fill(uniqueEmail('zh-TW'))
   await page.getByTestId('dev-login').click()
-  await expect(page).toHaveURL(/\/zh\/dashboard$/)
+  await expect(page).toHaveURL(/\/zh-TW\/dashboard$/)
 
-  await page.goto('/zh/pricing')
+  await page.goto('/zh-TW/pricing')
   await page.getByTestId('buy-party').click()
-  await expect(page).toHaveURL(/\/zh\/checkout\/mock\?order=/)
+  await expect(page).toHaveURL(/\/zh-TW\/checkout\/mock\?order=/)
   await page.getByTestId('mock-pay').click()
-  await expect(page).toHaveURL(/\/zh\/checkout\/success\?order=/)
+  await expect(page).toHaveURL(/\/zh-TW\/checkout\/success\?order=/)
   await expect(page.getByTestId('checkout-result')).toHaveAttribute('data-status', 'paid')
 })

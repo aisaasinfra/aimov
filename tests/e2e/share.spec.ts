@@ -80,7 +80,7 @@ test('公开分享：个人中心开启 → 匿名访客看到 noindex 的分享
     // 公开视频支持 Range；中文前缀同样可用
     const range = await visitor.request.get(`/media/shares/${shareId}/video`, { headers: { range: 'bytes=0-99' } })
     expect(range.status()).toBe(206)
-    expect((await sharePage(visitor.request, `/zh${sharePath}`)).html).toContain(content.zh.share.heading)
+    expect((await sharePage(visitor.request, `/zh-TW${sharePath}`)).html).toContain(content['zh-TW'].share.heading)
 
     // 其他登录用户不能替作者分享或停止分享
     await devLogin(other, uniqueEmail('share-other'))
@@ -138,7 +138,7 @@ test('分享链接被举报：凭分享链接即可定位视频，下架后分�
       post(anon, '/api/takedowns', {
         name: 'Share Reporter',
         email: 'share-reporter@example.com',
-        contentRef: `${ORIGIN}/zh/v/${shareId}`,
+        contentRef: `${ORIGIN}/zh-TW/v/${shareId}`,
         reason: 'impersonation',
         attest: true,
       }),

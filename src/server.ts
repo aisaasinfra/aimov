@@ -11,7 +11,7 @@ import { SHARE_PAGE, loadShare, shareHttpStatus } from './server/shares'
 import { isProduction } from './server/util'
 import type { VideoJobMessage } from './server/types'
 
-// mock 收银台页面（/checkout/mock、/zh/checkout/mock）：生产环境它调用的接口都是 404，页面本身也不该能打开
+// mock 收银台页面（/checkout/mock、/zh-TW/checkout/mock）：生产环境它调用的接口都是 404，页面本身也不该能打开
 const MOCK_CHECKOUT_PAGE = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?checkout\/mock$/i
 // 支付结果页：支付商回跳时会附带 email 等参数（Dodo 带买家邮箱），只保留 order
 const CHECKOUT_RESULT_PAGE = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?checkout\/success$/i

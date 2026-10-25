@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
 
 > 状态：本地全流程可用（单元测试 + Playwright e2e），尚未作为正式站点部署。哪些已用真实服务验证、哪些还没有，见 [ROADMAP.md](ROADMAP.md)。
 
-- 前端/SSR：TanStack Start（React 19）+ Tailwind 4，`/` 英文、`/zh` 中文
+- 前端/SSR：TanStack Start（React 19）+ Tailwind 4。公开语言按切换器顺序：`/` 英文（无前缀），然后 `/de`、`/es`、`/fr`、`/pt-BR`，繁体中文 `/zh-TW` 排在最后。没有简体中文站点语言。
 - API：Hono（`/api/*`、`/media/*`、`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/llms-full.txt`、`/docs-md/*`、IndexNow key 文件），入口 `src/server.ts`
 - 支付：Waffo Pancake（默认）、Dodo Payments，均为 MoR；也可用 Stripe（你自己是商户，销售税自己处理）；`mock` 仅用于本地和 e2e
 - 视频：fal.ai queue API（默认），可选 [yir.ai](https://yir.ai/?ref=qianshuixia) 网关或 [NanoAPI](https://nanoapi.ai)；`mock` 仅用于本地和 e2e。见下文“视频服务商”
@@ -31,10 +31,10 @@ https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
   - 交易邮件：积分到账、成片完成、生成失败退积分、举报回执（仅登录用户）与处理结果；管理员收新举报、超时提醒和新留言（Cloudflare Email Service，发件箱去重与重试）
   - 合规与内容安全：成片 AI 标识；照片 7 天、成片 30 天自动清理；举报下架（48 小时队列，同一张原图的全部成片一并删除并拉黑）；上传图片审核；联系和举报表单的 Turnstile 人机验证
   - 运维与安全：后台免部署切换维护模式、全站公告和每日生成上限；健康检查告警邮件、付款即时通知（Telegram、飞书、Discord 等）、D1 每日备份到 R2、前端错误上报到 Workers 日志、可选的 Sentry 兼容错误上报（`SENTRY_DSN`，留空即关）、CSP（Report-Only，每次请求一个 nonce）与 Permissions-Policy
-  - 内容与 SEO：one-page 首页（How it works / What is 区块，可选的痛点和“自己拍 vs 用本站”对比区块）、可扩展的文章集合（`/guides` 列表页、相关文章）、法律页、联系表单、公开等待列表、站内更新日志（`/changelog`，中英文）；SSR 输出完整的 canonical、hreflang、JSON-LD 和 sitemap；给问答引擎的 `llms.txt`；文案按语言拆包；`npm run seo:check` 检查全站
+  - 内容与 SEO：one-page 首页（How it works / What is 区块，可选的痛点和“自己拍 vs 用本站”对比区块）、可扩展的文章集合（`/guides` 列表页、相关文章）、法律页、联系表单、公开等待列表、站内更新日志（`/changelog`，六种语言）；SSR 输出完整的 canonical、hreflang、JSON-LD 和 sitemap；给问答引擎的 `llms.txt`；文案按语言拆包；`npm run seo:check` 检查全站
   - 登录后的产品反馈（`/dashboard/feedback`），后台状态为待处理 / 已计划 / 已上线 / 已关闭。和联系表单、举报下架分开。登录仍只有 Google。
 
-更新日志见 [CHANGELOG.md](CHANGELOG.md)。功能建议与后续规划见 [docs/SAAS_VIDEO_FEATURES.md](docs/SAAS_VIDEO_FEATURES.md) 和 [ROADMAP.md](ROADMAP.md)。SEO 规则、关键词规划和审计结果见 [docs/SEO_AUDIT.md](docs/SEO_AUDIT.md)。全部环境变量和 `site.ts` 上线字段见 [docs/env.md](docs/env.md)，新增支付商的步骤与 webhook 返回码约定见 [docs/payments.md](docs/payments.md)，订阅的开关、套餐和支付商配置见 [docs/subscriptions.md](docs/subscriptions.md)，改代码前的约定（积分、支付入账、双语文案、迁移、e2e）见 [AGENTS.md](AGENTS.md)。
+更新日志见 [CHANGELOG.md](CHANGELOG.md)。功能建议与后续规划见 [docs/SAAS_VIDEO_FEATURES.md](docs/SAAS_VIDEO_FEATURES.md) 和 [ROADMAP.md](ROADMAP.md)。SEO 规则、关键词规划和审计结果见 [docs/SEO_AUDIT.md](docs/SEO_AUDIT.md)。全部环境变量和 `site.ts` 上线字段见 [docs/env.md](docs/env.md)，新增支付商的步骤与 webhook 返回码约定见 [docs/payments.md](docs/payments.md)，订阅的开关、套餐和支付商配置见 [docs/subscriptions.md](docs/subscriptions.md)，改代码前的约定（积分、支付入账、六种公开语言、迁移、e2e）见 [AGENTS.md](AGENTS.md)。
 
 ## 本地开发
 
@@ -61,7 +61,7 @@ npm run dev -- --host 127.0.0.1      # http://127.0.0.1:3000
 
 每个热词站是一个独立仓库，把本模板设为 `upstream`。支付、安全和框架的修复在模板里改一次，各站点合并即可。
 
-用 Claude Code 时，建好站点仓库（第 1 步）后可以直接说“上新词：Moon Hop，TikTok 上的月球跳舞”。仓库自带的 `new-hot-site` skill（`.claude/skills/new-hot-site/`）会完成第 2–4 步和第 7 步的本地部分：整理站点简介、跑脚手架、改定价、重写两种语言的文案、生成占位素材，再跑 typecheck、test、build、seo:check 和离线 doctor。它只改站点差异文件，不提交、不部署。缺的信息（正式域名、授权素材等）写成 `TODO(site): …` 注释，`npm run doctor` 会列出来，正式站（`APP_ENV=production`）还有没填的就拦下部署。
+用 Claude Code 时，建好站点仓库（第 1 步）后可以直接说“上新词：Moon Hop，TikTok 上的月球跳舞”。仓库自带的 `new-hot-site` skill（`.claude/skills/new-hot-site/`）会完成第 2–4 步和第 7 步的本地部分：整理站点简介、跑脚手架、改定价、重写六种公开语言的文案、生成占位素材，再跑 typecheck、test、build、seo:check 和离线 doctor。它只改站点差异文件，不提交、不部署。缺的信息（正式域名、授权素材等）写成 `TODO(site): …` 注释，`npm run doctor` 会列出来，正式站（`APP_ENV=production`）还有没填的就拦下部署。
 
 1. **建站点仓库**：
    ```bash
@@ -82,7 +82,7 @@ npm run dev -- --host 127.0.0.1      # http://127.0.0.1:3000
    - 删除 `wrangler.staging.jsonc`（模板自身的预发配置）。
 
    积分包价格（`packages`）、订阅开关和套餐（`subscriptionsEnabled`、`plans`，开关设为 `false` 只卖积分包）、`durations`、`video.falModel` 按需在 `src/config/site.ts` 手改。套餐可加 `anchorPriceCents` 显示划线原价和折扣，只能填这个套餐真实卖过的价格（欧盟按降价前 30 天内最低价算），新站一般不填。
-3. **改文案**：`src/content/en.ts`、`src/content/zh.ts`。文案通过 `{keyword}` 等变量套用。每个词至少要重写 hero、whatIs、ideas、FAQ 和两篇文章，首页正文要自然覆盖长尾词。首页的痛点（`problem`）和对比（`withWithout`）区块按新趋势改，写不出真实内容就设为 `null`，不渲染。整站只换关键词会被 Google 判为 [scaled content abuse](https://developers.google.com/search/docs/essentials/spam-policies#scaled-content)。
+3. **改文案**：`src/content/` 下六种语言（`en.ts`、`de.ts`、`es.ts`、`fr.ts`、`pt-BR.ts`、`zh-TW.ts`）。文案通过 `{keyword}` 等变量套用。每个词至少要重写 hero、whatIs、ideas、FAQ 和两篇文章，首页正文要自然覆盖长尾词。首页的痛点（`problem`）和对比（`withWithout`）区块按新趋势改，写不出真实内容就设为 `null`，不渲染。整站只换关键词会被 Google 判为 [scaled content abuse](https://developers.google.com/search/docs/essentials/spam-policies#scaled-content)。
    - **文章**：在 `site.ts` 的 `articles` 加一项（`key`、`slug`、发布和更新日期，可选 `related`），再在每种语言的 `articles` 里补同名 key，缺了 typecheck 会报错。文章页地址是 `/<slug>`，自动进入 `/guides` 列表、sitemap 和其它文章的“相关文章”。`trend`、`howTo` 两篇被首页直接链接，不要删。建议每站至少一篇 1,200 词以上的支柱页，加 4–6 篇长尾页（教程、灵感、排错、对比）。
    - 文案按语言拆包，浏览器只下载当前语言（含法律页全文）。组件里照常用 `getContent(locale)`；只有在根路由之外、渲染之前要用文案时，才需要先 `await loadContent(locale)`。
    - 加一种语言：在 `site.ts` 的 `LOCALES` 和 `LOCALE_META` 里登记，新建 `src/content/<locale>.ts`（类型与 `en.ts` 一致），再在 `src/lib/i18n.ts` 的 `loaders` 里加一行动态 import。
@@ -163,7 +163,7 @@ npx wrangler r2 object put <name>-media/templates/<file>.mp4 --file seed/templat
   - 巡检失败时新版本已经上线：看 artifact 里的报告，必要时 `npx wrangler rollback` 回到上一版。migration 不会回滚，所以 migration 要兼容上一版代码。
 - 上线体检：用 Claude Code 时说“上线检查”。`launch-audit` skill（`.claude/skills/launch-audit/`）依次跑部署前检查（typecheck、test、build、doctor、`TODO(site)`）和线上检查（seo:check、test:smoke、HTTPS 与 R2 源视频、移动端 Lighthouse 和截图），再逐项核对站长平台、真实付款退款、发信域名、R2 生命周期、Google OAuth 等人工项，报告写到 `.tmp/launch-audit/<日期>/report.md`，结论分“可以上线”“可以上线，有待办”“不能上线”。全程只读，不部署、不迁移、不写密钥。
   - 只发 GET 和必然被拒的 POST：不登录、不下单、不写数据，可以随时对正式站跑。浏览器 UA 带 bot 标识，不计入访问报表；发现开发登录开着时直接判失败，不再请求开发接口。
-  - 检查 sitemap 里的页面全部 200 且没有脚本错误；中英文首页（含深色模式）水合；开发登录关闭、支付商不是 mock；开发与 mock 接口和 `/checkout/mock` 页面都是 404；跨站 POST 被拦；未签名的支付与视频服务商回调返回 401；安全响应头（https 下含 HSTS）；robots.txt 符合环境。
+  - 检查 sitemap 里的页面全部 200 且没有脚本错误；英文和繁体（`/zh-TW`）首页（含深色模式）水合；开发登录关闭、支付商不是 mock；开发与 mock 接口和 `/checkout/mock` 页面都是 404；跨站 POST 被拦；未签名的支付与视频服务商回调返回 401；安全响应头（https 下含 HSTS）；robots.txt 符合环境。
   - 报告和失败时的 trace 在 `.tmp/smoke-prod/`。
 - 自定义域名可用后，在站点的 `wrangler.jsonc` 里设 `"workers_dev": false` 和 `"preview_urls": false`。否则正式 Worker 还会在 `*.workers.dev` 上响应，绕过你在域名上配置的 WAF 和限流规则；每个版本还有一个公开的 [Version URL](https://developers.cloudflare.com/workers/configuration/previews/)，用同一套 D1、R2 运行该版本的代码。模板默认开着 `workers_dev`，是为了新站在绑定域名前也能访问。
 
@@ -261,7 +261,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - 退款事件先于付款事件到达（付款回调还在重试）时记为失败并返回 5xx，等付款入账后由支付商重试。
   - webhook 丢失或迟到时主动向支付商查单（`src/server/reconcile.ts`；Dodo 查 checkout session 再取 payment，Stripe 查 checkout session（带账单行和账单），Waffo 用 GraphQL `payments` 按商户订单号查）：成功页在约 15 秒和 60 秒时各查一次；5 分钟 Cron 查创建 10 分钟到 24 小时之间的 pending 订单，指数退避（约 10、20、40……分钟，每轮最多 10 单）；后台订单详情有“查单”按钮，补单前先用。查到的付款和 webhook 走同一套核对与幂等键，迟到的 webhook 不会重复入账。浏览器只能传订单号，不能传付款状态。已有 `mismatch` 事件的订单留给人工核对。
 - **生成**：先扣积分再入队，失败、超时或管理员判失败时自动退回。视频服务商的 webhook 和定时轮询可能同时处理同一个任务，只有一路能把任务置为成功，另一路不会删掉已落库的成片。
-- **成片分享**：用户在个人中心对自己的成片点“分享”，生成公开链接 `/v/<随机串>`（16 位，不可枚举，`/zh/v/…` 同样可用）。默认开启；`site.share.enabled` 设为 `false` 时按钮和页面都不出现，换脸、真人类站点建议关闭。
+- **成片分享**：用户在个人中心对自己的成片点“分享”，生成公开链接 `/v/<随机串>`（16 位，不可枚举，带语言前缀如 `/zh-TW/v/…` 同样可用）。默认开启；`site.share.enabled` 设为 `false` 时按钮和页面都不出现，换脸、真人类站点建议关闭。
   - 分享页只有视频、AI 角标与声明、“我也做一条”按钮和举报入口，不显示作者信息，HTML 和接口里也没有视频 ID。响应头和 meta 都是 `noindex`，不进 sitemap。
   - 链接预览：开启分享时浏览器从成片截一帧，画成 1200×630 的 JPEG（左上角带 AI 标识）一起上传，作为 `og:image`，成片地址写进 `og:video`。封面和上传照片一样过图片审核（不通过返回 422 `share_rejected`）；截帧失败（浏览器解码不了、超时）时不带封面，用站点默认 OG 图。
   - 媒体走 `/media/shares/<id>/video` 和 `/media/shares/<id>/poster.jpg`，支持 Range，`Cache-Control: public, max-age=300`，所以停止分享后已打开过的访客最多还能从缓存播放 5 分钟。
@@ -410,7 +410,7 @@ e2e 覆盖（64 个用例）：
 - 积分批次：后台补发限时积分后，生成先扣它、失败原路退回，到期作废后账单页提示消失；余额只够一次时并发发起两个生成，一个成功一个 402。账务规则另有单元测试在 SQLite 上执行全部迁移核对。
 - 兑换码：后台生成一批并导出 CSV、停用其中一个；用户在设置页兑换，积分带有效期；重复兑换、次数用完、停用或格式不对的码、非管理员访问都被拒绝；可用 3 次的活动码被 5 个用户同时兑换，只有 3 个成功。
 - 邀请奖励：好友经设置页的链接注册、首单付款后邀请人只拿一次奖励；第二单、其他用户的订单、无效码和老用户都不发；首单退款后奖励只回收一次；同一 IP 超出上限的注册被拒绝，后台显示原因；导出数据只含本人这一侧。
-- 运营设置：只有管理员能读写，未知参数或越界值整体拒绝；注册赠送和有效期改后立即用于新用户，审计记前后值；维护模式下生成和下单返回 503，已建订单的付款照常入账，管理员不受限，中英文页面都显示提示条；公告按语言显示；每日上限返回 429 且不扣积分；后台页面只提交改动项，本地各项测试连接都正常。
+- 运营设置：只有管理员能读写，未知参数或越界值整体拒绝；注册赠送和有效期改后立即用于新用户，审计记前后值；维护模式下生成和下单返回 503，已建订单的付款照常入账，管理员不受限，英文和繁体页面都显示提示条；公告按语言显示；每日上限返回 429 且不扣积分；后台页面只提交改动项，本地各项测试连接都正常。
 - 订阅：月付从定价页订阅、积分随当期作废、续费重放只入账一次、少付的转人工、扣款失败与恢复、账单页到期取消与撤销、客户门户、续费期间拒绝再订阅和注销、终止后可重新订阅；年付按月补发（Cron 重复执行不重发）、迟到的旧状态事件被忽略、退款只回收订阅积分并停止补发。
 - 告警与死信：任务进死信后判失败、只退一次积分；健康检查触发失败率和死信告警，同一时间桶重复执行不重发。
 - 交易邮件：支付回调重放只发一封、语言跟随用户；生成成功与失败各一封，重复判失败不重发；未登录举报不发回执、登录用户填本人邮箱才发，临近截止与超时提醒各一次、下架后通知举报人和作者且不再提醒；留言只提醒管理员；注销清除发件记录；后台邮件页。
@@ -420,7 +420,7 @@ e2e 覆盖（64 个用例）：
 - 安全响应头：内联脚本都带本次请求的 nonce；公开页、登录后生成和后台浏览器内零 CSP 违规；注入不带 nonce 的脚本会被报告；报告接口不受同源校验影响。
 - 前端错误上报：全局异常和未处理的拒绝各报一次、页面地址不带 query，重复错误不重报，每页最多 5 条；渲染出错时错误页显示的编号与上报一致，接口恢复后点重试回到正常页面。
 - 归因与报表：UTM 归因跨会话保持、报表和 CSV。
-- SEO：seo-check 全部规则、中英文首页水合、客户端路由切换后 head 同步、语言链接可抓取。
+- SEO：seo-check 全部规则、英文和繁体首页水合、客户端路由切换后 head 同步、语言链接可抓取。
 
 产物在 `.tmp/video-template-e2e/`：`report/`（HTML 报告，含每步截图和 trace）、`results.json`、`test-results/`。
 
@@ -428,7 +428,7 @@ e2e 覆盖（64 个用例）：
 
 ```text
 src/config/site.ts      每个词要改的配置
-src/content/            中英文文案
+src/content/            六种公开语言文案（en、de、es、fr、pt-BR、zh-TW）
 src/routes/             页面（{-$locale} 为可选语言前缀，admin/ 为后台）
 src/server/             API：auth、credits、orders、payments/、video/、jobs（队列、死信与 Cron）、alerts（健康检查告警）、admin、seo、retention、takedown、moderation、turnstile、email（发件箱）、notifications（业务事件 → 邮件）、settings（运营设置）、probes（测试连接）、csp（内容安全策略）、client-error（前端错误上报）
 migrations/             D1 迁移

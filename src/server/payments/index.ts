@@ -7,7 +7,7 @@ import type { PaidEvent, PaymentProvider, PaymentProviderId } from './types'
 import { createWaffoProvider } from './waffo'
 
 // mock：本地与 e2e 用，跳转到站内 /checkout/mock 页面模拟付款（生产环境禁止）
-// 与 successUrl 保持同一语言前缀（/zh/checkout/success → /zh/checkout/mock）
+// 与 successUrl 保持同一语言前缀（/zh-TW/checkout/success → /zh-TW/checkout/mock）
 function createMockProvider(env: Env): PaymentProvider {
   return {
     id: 'mock',

@@ -2,7 +2,7 @@
 
 ## 结论
 
-模板的 SSR 输出现在满足基础 SEO 的全部硬性要求：每页一个 H1、title 不超过 60、canonical/hreflang 自指一致、首页与文章有完整 JSON-LD、sitemap 带 lastmod、尾斜杠 301、非公开页 noindex。上新词时只改 `src/config/site.ts` 和两份文案，结构化数据、sitemap、canonical 全部自动跟随。
+模板的 SSR 输出现在满足基础 SEO 的全部硬性要求：每页一个 H1、title 不超过 60、canonical/hreflang 自指一致、首页与文章有完整 JSON-LD、sitemap 带 lastmod、尾斜杠 301、非公开页 noindex。上新词时只改 `src/config/site.ts` 和各语言文案，结构化数据、sitemap、canonical 全部自动跟随。
 
 `npm run seo:check` 把这些规则固化成脚本，`tests/e2e/seo.spec.ts` 在 e2e 里强制执行，模板改坏会直接失败。
 
@@ -21,7 +21,7 @@
 
 - 长尾词写在 `site.seo.secondaryKeywords`，seo-check 检查英文首页正文是否自然覆盖。不输出 `<meta name="keywords">`（Google 不使用）。
 - 首页 title 不加品牌后缀（品牌名本身就含关键词，再加会超长），其他页用 `页面名 – 品牌`。
-- 中文站 `/zh` 是同一结构的翻译版本，用 hreflang 互指，不和英文站争排名。
+- `de`、`es`、`fr`、`pt-BR` 和繁体 `/zh-TW` 是同一结构的翻译版本，用 hreflang 互指。没有简体 `/zh`。`zh-TW` 在切换器和 hreflang 列表里排最后。
 
 ## 首页 one-page 结构
 
@@ -61,8 +61,8 @@ HowTo 富结果 Google 已下线，所以三步流程只用语义化有序列表
 
 ## 已落地的技术项
 
-- **SSR**：所有公开页的 title/meta/canonical/hreflang/JSON-LD/正文都在首次 HTML 中，不依赖 JS。e2e 验证中英文首页水合无报错，并验证客户端路由切换后 head 同步更新（canonical 不残留上一页、JSON-LD 跟随页面）。
-- **canonical / hreflang**：基于 `site.domain` 生成，自指 + `en`/`zh`/`x-default`，与 sitemap 中的 `xhtml:link` 一致。
+- **SSR**：所有公开页的 title/meta/canonical/hreflang/JSON-LD/正文都在首次 HTML 中，不依赖 JS。e2e 验证英文和繁体首页水合无报错，并验证客户端路由切换后 head 同步更新（canonical 不残留上一页、JSON-LD 跟随页面）。
+- **canonical / hreflang**：基于 `site.domain` 生成，自指 + `LOCALES`（`en`、`de`、`es`、`fr`、`pt-BR`、`zh-TW`）+ `x-default`，与 sitemap 中的 `xhtml:link` 一致。
 - **内链**：导航和页脚链到 `/guides`（文章枢纽，链到全部文章），页脚另列前 3 篇；文章页有可见面包屑（首页 → 指南 → 文章）和"相关指南"（默认取最近更新的其他文章，可用 `related` 指定）。FAQ 答案（`faq.items[].guide`）、价格页和联系页也链到文章或 `/guides`，锚文本用与文章标题不同的长尾词。语言切换是带 `hreflang` 的普通链接，页脚始终渲染，爬虫可跟随。
 - **索引控制**：dashboard、checkout、sign-in、admin 带 noindex；`robots.txt` 只在 `APP_ENV=production` 放开，预览环境整站禁止抓取。
 - **结构化数据**：`src/lib/seo.ts` 统一生成，`<` 转义防止提前闭合 script。不编造 aggregateRating/review（违反 [Google 评价摘要政策](https://developers.google.com/search/docs/appearance/structured-data/review-snippet#guidelines)），有真实评价后再加。
@@ -85,7 +85,7 @@ HowTo 富结果 Google 已下线，所以三步流程只用语义化有序列表
 上线前：
 
 1. `node scripts/new-site.mjs --keyword "..." --domain ... --write` 改好配置。
-2. 重写 `src/content/en.ts`、`zh.ts` 的 hero、whatIs、ideas、faq 和两篇文章。只换关键词的整站模板内容容易被判为 [scaled content abuse](https://developers.google.com/search/docs/essentials/spam-policies#scaled-content)。
+2. 重写 `src/content/` 下六种语言文案的 hero、whatIs、ideas、faq 和两篇文章。只换关键词的整站模板内容容易被判为 [scaled content abuse](https://developers.google.com/search/docs/essentials/spam-policies#scaled-content)。
 3. 换 `public/og.png`（1200×630）和示例素材。
 4. `npm run seo:check` 无 error。
 

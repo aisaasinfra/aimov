@@ -10,9 +10,13 @@ import { DEFAULT_LOCALE, LOCALE_META, LOCALES, isLocale, localePath, type Locale
 const languageTag = /^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$/
 const MAX_HEADER_LENGTH = 512
 
+// 主语言 → 站点键。葡萄牙语只有 pt-BR。中文不走这张表：简体不能落到已删除的 zh，光秃的 zh 也不猜繁体。
 const primaryLocale: Record<string, Locale> = {
   en: 'en',
-  zh: 'zh',
+  de: 'de',
+  es: 'es',
+  fr: 'fr',
+  pt: 'pt-BR',
 }
 
 export function sanitizeAcceptLanguage(value: string | null | undefined): string | null {
@@ -25,12 +29,27 @@ export function sanitizeAcceptLanguage(value: string | null | undefined): string
   return sliced
 }
 
+/** zh-TW、zh-HK、zh-MO、zh-Hant* → 繁体。zh-CN、zh-Hans、zh-SG 和单独的 zh 不匹配任何公开语言。 */
+export function matchChineseTag(tag: string, enabled: readonly Locale[]): Locale | null {
+  const target: Locale = 'zh-TW'
+  if (!enabled.includes(target)) return null
+  const parts = tag.split('-')
+  if (parts[0] !== 'zh') return null
+  const script = parts.find((part) => part === 'hant' || part === 'hans')
+  const region = parts.find((part) => part === 'tw' || part === 'hk' || part === 'mo' || part === 'cn' || part === 'sg')
+  if (script === 'hans' || region === 'cn' || region === 'sg') return null
+  if (script === 'hant' || region === 'tw' || region === 'hk' || region === 'mo') return target
+  return null
+}
+
 export function matchAcceptLanguageTag(tag: string, enabled: readonly Locale[] = LOCALES): Locale | null {
   const value = tag.trim().toLowerCase()
   if (!languageTag.test(value)) return null
 
-  const exact = primaryLocale[value]
-  if (exact && enabled.includes(exact)) return exact
+  if (value === 'zh' || value.startsWith('zh-')) return matchChineseTag(value, enabled)
+
+  const exact = enabled.find((locale) => locale.toLowerCase() === value)
+  if (exact) return exact
 
   const primary = value.split('-')[0] ?? ''
   const fromPrimary = primaryLocale[primary]

@@ -4,11 +4,11 @@ import { buildPlan, layerOf } from '../../scripts/sync-plan.mjs'
 describe('sync-plan', () => {
   it('按 AGENTS.md 的站点差异文件分层，public/_headers 仍是共用代码', () => {
     const layers = Object.fromEntries(
-      ['src/config/site.ts', 'src/content/zh.ts', 'public/og.png', 'public/_headers', 'seed/templates/a-6s.mp4', 'wrangler.jsonc', 'package.json', 'package-lock.json', 'wrangler.staging.jsonc', 'src/server/orders.ts', 'src/styles.css', 'migrations/0009_x.sql'].map((p) => [p, layerOf(p)]),
+      ['src/config/site.ts', 'src/content/zh-TW.ts', 'public/og.png', 'public/_headers', 'seed/templates/a-6s.mp4', 'wrangler.jsonc', 'package.json', 'package-lock.json', 'wrangler.staging.jsonc', 'src/server/orders.ts', 'src/styles.css', 'migrations/0009_x.sql'].map((p) => [p, layerOf(p)]),
     )
     expect(layers).toEqual({
       'src/config/site.ts': 'site',
-      'src/content/zh.ts': 'site',
+      'src/content/zh-TW.ts': 'site',
       'public/og.png': 'site',
       'public/_headers': 'shared',
       'seed/templates/a-6s.mp4': 'site',

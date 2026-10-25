@@ -27,15 +27,21 @@ function sendError(code: string | null, message = 'boom') {
 
 describe('renderEmail', () => {
   it('按 locale 选择语言和带前缀的链接，未知语言回退英文', () => {
-    const zh = renderEmail('generation_failed', { generationId: 'gen_1', credits: 6 }, { siteUrl: SITE_URL, locale: 'zh' })
-    expect(zh.subject).toContain('积分已退回')
-    expect(zh.text).toContain('6 个积分已退回')
-    expect(zh.text).toContain('重新生成: https://example.test/zh\n')
+    const zh = renderEmail('generation_failed', { generationId: 'gen_1', credits: 6 }, { siteUrl: SITE_URL, locale: 'zh-TW' })
+    expect(zh.subject).toContain('點數已退回')
+    expect(zh.text).toContain('6 點已退回')
+    expect(zh.text).toContain('重新產生: https://example.test/zh-TW\n')
 
-    const fallback = renderEmail('generation_failed', { generationId: 'gen_1', credits: 6 }, { siteUrl: SITE_URL, locale: 'fr' })
+    const de = renderEmail('generation_failed', { generationId: 'gen_1', credits: 6 }, { siteUrl: SITE_URL, locale: 'de' })
+    expect(de.text).toContain('Erneut versuchen: https://example.test/de\n')
+
+    const removed = renderEmail('generation_failed', { generationId: 'gen_1', credits: 6 }, { siteUrl: SITE_URL, locale: 'zh' })
+    expect(removed.subject).toContain('credits refunded')
+    expect(removed.text).toContain('Try again: https://example.test/')
+
+    const fallback = renderEmail('generation_failed', { generationId: 'gen_1', credits: 6 }, { siteUrl: SITE_URL, locale: 'ja' })
     expect(fallback.subject).toContain('credits refunded')
     expect(fallback.text).toContain('Try again: https://example.test/')
-    expect(fallback.text).not.toContain('/zh/')
   })
 
   it('用户输入只出现在正文且 HTML 转义，不进 Subject；留言提醒的 replyTo 是留言人', () => {
