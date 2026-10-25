@@ -382,16 +382,71 @@
   z-index: 6;
   display: flex;
   justify-content: center;
-  padding: 0.15rem 1.25rem 0;
+  padding: 0.7rem 1.1rem 0.15rem;
   pointer-events: none;
 }
 
 .merry-coverflow-caption-inner {
+  position: relative;
   display: flex;
-  width: min(100%, 34rem);
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
+  width: max-content;
+  max-width: min(100%, 20rem);
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  pointer-events: none;
+  padding: 0.48rem 0.95rem 0.5rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: 1.05rem;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  box-shadow: 0 14px 34px rgba(32, 61, 50, 0.13);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.merry-coverflow-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  line-height: 1.15;
+  color: var(--fg);
+}
+
+.merry-coverflow-badge {
+  flex: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-soft) 88%, var(--card));
+  color: var(--muted);
+  padding: 0.12rem 0.48rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.merry-caption-sprig {
+  position: absolute;
+  top: -0.95rem;
+  right: -0.08rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  color: #203d32;
+  pointer-events: none;
+  transform: rotate(8deg);
+}
+
+.merry-caption-berry {
+  fill: #8b2d32;
+}
+
+[data-theme='dark'] .merry-caption-sprig {
+  color: var(--fg);
+}
+
+[data-theme='dark'] .merry-caption-berry {
+  fill: var(--accent);
 }
 
 @media (min-width: 640px) and (max-width: 1023px) {
@@ -528,23 +583,28 @@
     );
   }
 
+  /* Caption box matches the center card so the cream card sits under that poster
+     and cannot cross into the left panel fade. */
   .merry-coverflow-caption {
     position: absolute;
-    bottom: 0.7rem;
-    left: calc(max(0px, 50% - 36rem) + 26rem + min(58cqh, 30vw, 28rem));
-    width: max-content;
-    max-width: min(18rem, 42vw);
+    top: calc(45% + min(64cqh, 33vw, 30rem) * 2 / 3 + 1.15rem);
+    bottom: auto;
+    left: calc(
+      max(0px, 50% - 36rem) + 26rem + min(58cqh, 30vw, 28rem) - min(64cqh, 33vw, 30rem) / 2
+    );
+    width: min(64cqh, 33vw, 30rem);
+    max-width: none;
     padding: 0;
-    transform: translateX(-50%);
+    transform: none;
   }
 
   .merry-coverflow-caption-inner {
-    width: max-content;
-    max-width: 100%;
+    max-width: calc(100% - 0.5rem);
+    padding: 0.5rem 1rem 0.52rem 1.05rem;
   }
 
-  .merry-coverflow-frame-note {
-    display: none;
+  .merry-coverflow-title {
+    font-size: 1.4rem;
   }
 }
 
@@ -669,7 +729,14 @@ body[data-play-chrome] [data-support-fab] {
   }
 
   .merry-coverflow-caption {
-    padding-top: 0.1rem;
+    padding-top: 0.95rem;
+  }
+
+  .merry-caption-sprig {
+    top: -0.72rem;
+    right: -0.02rem;
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   .play-studio-photo {
