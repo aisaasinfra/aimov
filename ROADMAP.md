@@ -1,8 +1,10 @@
 # ROADMAP
 
-## 当前状态（2026-10-24）
+## 当前状态（2026-10-25）
 
 本地全部可用。模板本身不部署上线（2026-10-20 决定），线上验证随第一个热词站进行。下文提到的 `.tmp/` 工件不入库，只在作者本机。
+
+- 首页封面流（2026-10-25）：首屏整条是左右对称的 3D Coverflow（大约 5 张）。文案和上传、时长、生成浮在奶油卡片上，左侧卡片淡进背景且不抢点击。生成按钮下面有当前世界的缩略图，跟着所选世界变。导航仍是松绿，生成按钮仍是浆果红。`npm run typecheck` 与 `npm test`（283）通过。
 
 - aimov 二开（2026-10-24）：上游已有 Google One Tap（nonce、`auto_select` 关闭）。本仓库补上关掉提示后在当前标签页不再弹，以及只根据 `Accept-Language` 询问是否切换语言（不静默跳转、不按国家或 IP 选语言）。说明见 [docs/google-one-tap-and-locale.md](docs/google-one-tap-and-locale.md)。圣诞皮肤还没做。这次改动后 `npm run typecheck` 和 `npm test`（256）通过；没有重跑全量 e2e 和 `npm run build`。上面的 239 个单元测试和 64 个 e2e 是模板在这次二开之前的数字。
 
