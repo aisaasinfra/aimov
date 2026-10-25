@@ -55,6 +55,7 @@ function AdminOrders() {
           options={[
             ['', '全部'],
             ['waffo', 'Waffo'],
+            ['paypal', 'PayPal'],
             ['dodo', 'Dodo Payments'],
             ['stripe', 'Stripe'],
             ['mock', 'Mock'],

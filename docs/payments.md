@@ -1,6 +1,6 @@
 # 支付商接入
 
-模板内置 Waffo Pancake、Dodo Payments 和 Stripe，本地和 e2e 用 `mock`。本文说明支付商代码要遵守的约定，以及新增一个支付商要改哪些地方。各支付商的后台配置和实测行为见 README 的“第三方回调地址”。
+模板内置 Waffo Pancake、Dodo Payments、Stripe 和 PayPal（Orders v2；PayPal.cn 用同一套全球 REST，没有单独的中国支付 API）。产品默认通道是 Waffo + PayPal：Waffo 卖积分包和订阅，PayPal 只卖积分包。Dodo 和 Stripe 仍可作为 `PAYMENT_PROVIDER`。本地和 e2e 用 `mock`。本文说明支付商代码要遵守的约定，以及新增一个支付商要改哪些地方。各支付商的后台配置和实测行为见 README 的“第三方回调地址”。
 
 ## 数据流
 
@@ -51,6 +51,8 @@
 
 各支付商的差异：
 
+PayPal 不出现在这张表里：它不建订阅，订阅状态事件记为 ignored。年付若走 Waffo，`subscription.payment_succeeded` 不带周期；当期还开着、且不是刚被状态事件打开的新周期时，不再重置 `grants_done`、也不再发一轮积分。
+
 | | Dodo | Waffo | Stripe |
 | --- | --- | --- | --- |
 | 扣款事件 | `payment.succeeded`，带 `subscription_id` 和 `service_periods`（本次覆盖的周期） | `subscription.payment_succeeded`，不带周期：先按付款时间推算，状态事件到达后校正周期，当期积分的到期时间跟着对齐。Waffo 的周期只到日期（`T00:00:00Z`） | `invoice.paid`（首付和续费都是），周期取账单行的 `period`。subscription 模式的 `checkout.session.completed` 不入账，避免和首张账单重复 |
@@ -89,6 +91,19 @@ test 模式实测（2026-10-21，webhook 模式）：Waffo 月付首付、订阅
 - 受限 Key（`rk_`）运行时需要的权限：Checkout Sessions 写、Invoices 读、Prices 读（测试连接）、Refunds 写、Subscriptions 写、Customer portal 写。
 - 退款没有固定期限，可多次部分退款。退款从 Stripe 余额扣，余额不足时挂起为 pending，等变成 succeeded 再回收积分。退款之后又失败（`refund.failed`）时积分已回收，不会自动恢复，需要人工处理。
 - 异步付款方式（银行转账等）在 `checkout.session.completed` 时还是 unpaid，等 `async_payment_succeeded` 才入账。
+
+## PayPal
+
+PayPal.cn 与 paypal.com 共用 Orders v2（`api-m.paypal.com` / `api-m.sandbox.paypal.com`）。实现只用 `fetch` 和 Web Crypto，不依赖 Node SDK，可以跑在 Workers 上。
+
+- 只卖一次性积分包。结账选择器里 PayPal 和 Waffo 可以同时出现（`PAYMENT_PROVIDER` 为 `waffo` 或 `paypal`，且另一家凭据齐全）。默认通道是配置的那一家；两家都在时，没选通道的订阅落到非 PayPal 通道。显式 `channel=paypal` 买订阅返回 400 `paypal_packs_only`。
+- 下单：`POST /v2/checkout/orders`，`intent=CAPTURE`，数字商品、`NO_SHIPPING`，`custom_id` / `invoice_id` 是本站订单号，`PayPal-Request-Id` 用订单号。审批地址必须是 `https` 且主机为 `paypal.com` 或 `paypal.cn`。金额必须是两位小数；指数不是 2 的币种（如 JPY）直接拒绝。
+- 不要求 `PAYPAL_PRODUCTS` 里有商品 id。金额以订单为准。
+- 入账只认 `PAYMENT.CAPTURE.COMPLETED` 且 capture `status=COMPLETED`。`CHECKOUT.ORDER.APPROVED` 记为 ignored，同时用 Orders capture 接口去收款（`ORDER_ALREADY_CAPTURED` 再读一次订单）。积分仍等 capture 完成，或成功页查单。查单在订单已是 `APPROVED` 时也会先 capture，`eventId` 为 `reconcile:<capture id>`。
+- 退款事件：`PAYMENT.CAPTURE.REFUNDED`、`PAYMENT.CAPTURE.REVERSED`、`PAYMENT.CAPTURE.PARTIALLY_REFUNDED`。后台提交退款后等 webhook 回收积分。窗口 180 天，可多次部分退款，退款单号没有固定前缀。没有客户门户。
+- 验签：CRC-32（ISO-HDLC，十进制；`"123456789"` → `3421780262`）拼进 `transmissionId|transmissionTime|webhookId|crc32`，用 webhook 头里的证书做 RSA-SHA256。证书 URL 只允许 `api.paypal.com`、`api-m.paypal.com` 及其 sandbox 主机上的 `/v1/notifications/certs/CERT-...`，不允许用户信息、端口、查询串或跳转。证书主机是否含 `sandbox` 必须和 `PAYPAL_MODE` 一致。`PAYPAL_WEBHOOK_ID` 缺失或仍是字面量 `WEBHOOK_ID` 时拒收。
+- 幂等仍走 `payment_events (provider, event_id)` 和积分流水 `order:<id>`。支付商代码不写数据库。
+- 没有 sandbox e2e。改这条通道时跑 `tests/unit/paypal.test.ts`。
 
 ## sandbox e2e
 

@@ -1,5 +1,7 @@
+import { findPlan } from '#/config/site'
 import { ApiError, isProduction } from '../util'
 import { createDodoProvider } from './dodo'
+import { createPaypalProvider, paypalReady } from './paypal'
 import { createStripeProvider } from './stripe'
 import type { PaidEvent, PaymentProvider, PaymentProviderId } from './types'
 import { createWaffoProvider } from './waffo'
@@ -35,16 +37,56 @@ export function mockPaidKey(orderId: string) {
   return `mock_paid:${orderId}`
 }
 
-export function activePaymentProviderId(env: Env): PaymentProviderId {
-  const id = env.PAYMENT_PROVIDER as PaymentProviderId
-  if (id === 'waffo' || id === 'dodo' || id === 'stripe') return id
-  if (id === 'mock' && !isProduction(env)) return 'mock'
+function waffoReady(env: Env) {
+  return Boolean(env.WAFFO_MERCHANT_ID?.trim() && env.WAFFO_PRIVATE_KEY?.trim())
+}
+
+// 结账可选通道。本地 mock 只有 mock。产品默认是 Waffo + PayPal.cn：两个都配齐就都能选。
+// Dodo / Stripe 仍可当 PAYMENT_PROVIDER，但不和这两条主通道混在一个选择器里。
+export function checkoutChannels(env: Env): PaymentProviderId[] {
+  const configured = env.PAYMENT_PROVIDER as PaymentProviderId
+  if (configured === 'mock') return isProduction(env) ? [] : ['mock']
+  if (configured === 'dodo' || configured === 'stripe') return [configured]
+  const channels: PaymentProviderId[] = []
+  if (waffoReady(env) || configured === 'waffo') channels.push('waffo')
+  if (paypalReady(env) || configured === 'paypal') channels.push('paypal')
+  return channels
+}
+
+export function defaultCheckoutChannel(env: Env): PaymentProviderId {
+  const channels = checkoutChannels(env)
+  const configured = env.PAYMENT_PROVIDER as PaymentProviderId
+  if (channels.includes(configured)) return configured
+  if (channels.includes('waffo')) return 'waffo'
+  if (channels[0]) return channels[0]
   throw new ApiError(503, 'payment_not_configured', `Unsupported PAYMENT_PROVIDER: ${env.PAYMENT_PROVIDER}`)
+}
+
+// 积分包用买家选的通道（没选就用默认）。订阅不能走 PayPal，落到 Waffo / Dodo / Stripe / mock。
+export function resolveCheckoutChannel(env: Env, requested: string | undefined, packageId: string): PaymentProviderId {
+  const channels = checkoutChannels(env)
+  if (!channels.length) throw new ApiError(503, 'payment_not_configured', `Unsupported PAYMENT_PROVIDER: ${env.PAYMENT_PROVIDER}`)
+  const plan = !!findPlan(packageId)
+  const allowed = plan ? channels.filter((id) => id !== 'paypal') : channels
+  if (!allowed.length) throw new ApiError(400, 'paypal_packs_only', 'PayPal checkout only sells credit packs')
+  if (requested) {
+    if (!channels.includes(requested as PaymentProviderId)) throw new ApiError(400, 'invalid_channel', `Unsupported channel: ${requested}`)
+    if (plan && requested === 'paypal') throw new ApiError(400, 'paypal_packs_only', 'PayPal checkout only sells credit packs')
+    return requested as PaymentProviderId
+  }
+  const preferred = defaultCheckoutChannel(env)
+  if (allowed.includes(preferred)) return preferred
+  return allowed[0]!
+}
+
+export function activePaymentProviderId(env: Env): PaymentProviderId {
+  return defaultCheckoutChannel(env)
 }
 
 // 退款、查单按订单所属支付商走（切换 PAYMENT_PROVIDER 后，旧订单仍找原支付商）；生产环境不认 mock 订单
 export function getOrderProvider(env: Env, id: string): PaymentProvider | null {
   if (id === 'waffo') return createWaffoProvider(env)
+  if (id === 'paypal') return createPaypalProvider(env)
   if (id === 'dodo') return createDodoProvider(env)
   if (id === 'stripe') return createStripeProvider(env)
   if (id === 'mock' && !isProduction(env)) return createMockProvider(env)
@@ -52,9 +94,7 @@ export function getOrderProvider(env: Env, id: string): PaymentProvider | null {
 }
 
 export function getPaymentProvider(env: Env): PaymentProvider {
-  const id = activePaymentProviderId(env)
-  if (id === 'waffo') return createWaffoProvider(env)
-  if (id === 'dodo') return createDodoProvider(env)
-  if (id === 'stripe') return createStripeProvider(env)
-  return createMockProvider(env)
+  const provider = getOrderProvider(env, activePaymentProviderId(env))
+  if (!provider) throw new ApiError(503, 'payment_not_configured', `Unsupported PAYMENT_PROVIDER: ${env.PAYMENT_PROVIDER}`)
+  return provider
 }

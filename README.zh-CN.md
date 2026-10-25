@@ -195,6 +195,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
 | Waffo Pancake | Dashboard → Settings → Webhooks | `https://<domain>/api/webhooks/waffo` |
 | Dodo Payments | Dashboard → Webhooks | `https://<domain>/api/webhooks/dodo` |
 | Stripe | Developers → Webhooks（或 `stripe-setup.mjs --webhook`） | `https://<domain>/api/webhooks/stripe` |
+| PayPal / PayPal.cn | Developer Dashboard → Apps → Webhooks | `https://<domain>/api/webhooks/paypal` |
 | fal.ai | 代码自动带上 | `https://<domain>/api/webhooks/fal` |
 | yir.ai | 代码自动带上（只有 https 地址才带，本地开发靠轮询） | `https://<domain>/api/webhooks/yir` |
 
@@ -203,7 +204,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - 每笔支付只能退款一次（可部分），且须在支付后 14 天内。后台会提前拦截，错误码为 `waffo_refund_exists` / `refund_window_expired`。
   - webhook 丢失时用“仅记账”补登，必须填 `REF_` 退款单号（填 `TKT_` 会被拒绝，否则迟到的 webhook 会再扣一次）。
   - webhook 由 Upstash QStash 投递，失败重试只发往创建时填的 URL，所以必须用固定域名。
-- **本地联调真实 webhook**：`node scripts/webhook-proxy.mjs --port 3100` 只转发 `POST /api/webhooks/{waffo,dodo,stripe}`，把隧道指向它，不要直接暴露 dev server。用 sandbox e2e 自动跑一遍收银台和 webhook 的做法见 [docs/payments.md](docs/payments.md)。实测 Pinggy 可用（`ssh -p 443 -R0:127.0.0.1:3100 qr@a.pinggy.io`，免费版 60 分钟），localhost.run 经常断线。
+- **本地联调真实 webhook**：`node scripts/webhook-proxy.mjs --port 3100` 只转发 `POST /api/webhooks/{waffo,dodo,stripe,paypal}`，把隧道指向它，不要直接暴露 dev server。用 sandbox e2e 自动跑一遍收银台和 webhook 的做法见 [docs/payments.md](docs/payments.md)。实测 Pinggy 可用（`ssh -p 443 -R0:127.0.0.1:3100 qr@a.pinggy.io`，免费版 60 分钟），localhost.run 经常断线。
 - **Dodo**：`DODO_ENVIRONMENT` 为 `test` 或 `live`。webhook 按 Standard Webhooks 规范验签，`DODO_WEBHOOK_SECRET` 填控制台给的 `whsec_...`。
   - API 密钥按资源授权：`dodo-setup.mjs` 需要 Products 写入，加 `--webhook` 还要 Webhooks 写入；运行时需要 Checkout sessions 和 Refunds 写入，主动对账还要 Checkout sessions 和 Payments 读取；卖订阅还要 Subscriptions 写入（取消续费、撤销）、Customers 写入（客户门户）和 Subscriptions 读取。
   - 商户只能在支付后 30 天内退款，可分多次部分退款，但同一时间只能有一笔在处理（[文档](https://docs.dodopayments.com/features/transactions/refunds)）。超过 30 天时后台返回 `refund_window_expired`。
@@ -215,6 +216,9 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
 - **Stripe**：`STRIPE_ENVIRONMENT` 为 `test` 或 `live`，要和 Key 前缀（`sk_test_` / `sk_live_`）及 webhook 的 `livemode` 一致。`STRIPE_PRODUCTS` 把积分包和套餐映射到 Price ID。webhook 用 `STRIPE_WEBHOOK_SECRET`（`whsec_...`）验签，checkout session 和账单入账前按固定 API 版本重新取一次。
   - Stripe 不是 MoR：销售税和发票由你负责。退款没有固定期限，可多次部分退款；退款从 Stripe 余额扣，余额不足时挂起为 pending。
   - 订阅按 `invoice.paid` 入账。客户门户要先在 Settings → Billing → Customer portal 保存一次配置才能打开。受限 Key（`rk_`）需要的权限见 [docs/payments.md](docs/payments.md) 的“Stripe”。
+- **PayPal / PayPal.cn**：与全球站共用 Orders v2（`PAYPAL_MODE=sandbox|live`），没有单独的中国支付 API。只卖积分包；订阅留在 Waffo（若 `PAYMENT_PROVIDER` 是 Dodo 或 Stripe，则留在那一家）。密钥：`PAYPAL_CLIENT_ID`、`PAYPAL_CLIENT_SECRET`、`PAYPAL_WEBHOOK_ID`（不要填字面量 `WEBHOOK_ID`）。`PAYPAL_PRODUCTS` 可以保持 `{}`。
+  - webhook 订阅 `CHECKOUT.ORDER.APPROVED`、`PAYMENT.CAPTURE.COMPLETED`、`PAYMENT.CAPTURE.DENIED`、`PAYMENT.CAPTURE.REFUNDED`、`PAYMENT.CAPTURE.REVERSED`、`PAYMENT.CAPTURE.PARTIALLY_REFUNDED`。只有 capture 完成才入账。退款窗口 180 天，可多次部分退款。
+  - 验签用传输头和 PayPal 证书（对原始 body 的 CRC-32 做 RSA-SHA256）。细节见 [docs/payments.md](docs/payments.md)。还没有 sandbox e2e。
 - **fal、yir**：webhook 只当作“该查一下了”的信号，结果总是用 `FAL_KEY` 或 `YIR_API_KEY` 重新拉取。另外每 5 分钟的 Cron 会补查卡住的任务，超过 45 分钟判失败并退积分。
 
 ## 关键设计

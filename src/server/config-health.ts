@@ -40,8 +40,13 @@ export function isWeakSessionSecret(secret: string) {
 
 const PAYMENT_SECRETS: Record<string, string[]> = {
   waffo: ['WAFFO_MERCHANT_ID', 'WAFFO_PRIVATE_KEY'],
+  paypal: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID'],
   dodo: ['DODO_API_KEY', 'DODO_WEBHOOK_SECRET'],
   stripe: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+}
+const PAYPAL_HOSTS = {
+  sandbox: 'https://api-m.sandbox.paypal.com',
+  live: 'https://api-m.paypal.com',
 }
 const VIDEO_SECRETS: Record<string, string[]> = { fal: ['FAL_KEY'], yir: ['YIR_API_KEY'] }
 const MODERATION_SECRETS: Record<string, string[]> = { openai: ['OPENAI_API_KEY'], none: [] }
@@ -108,7 +113,7 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
 
   const payment = vars('PAYMENT_PROVIDER')
   if (payment === 'mock') error('PAYMENT_PROVIDER', 'PAYMENT_PROVIDER=mock：生产环境下单会返回 503')
-  else if (!PAYMENT_SECRETS[payment]) error('PAYMENT_PROVIDER', `未知的 PAYMENT_PROVIDER=${payment || '(空)'}，可选 waffo、dodo、stripe`)
+  else if (!PAYMENT_SECRETS[payment]) error('PAYMENT_PROVIDER', `未知的 PAYMENT_PROVIDER=${payment || '(空)'}，可选 waffo、paypal、dodo、stripe`)
   else {
     requireSecrets(PAYMENT_SECRETS[payment], `${payment} 支付`)
     const productsKey = `${payment.toUpperCase()}_PRODUCTS`
@@ -120,16 +125,34 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
     } catch {
       error(productsKey, `${productsKey} 不是合法 JSON`)
     }
-    const missing = input.packageIds.filter((id) => typeof products[id] !== 'string' || !products[id])
-    if (missing.length) error(productsKey, `${productsKey} 缺少积分包的商品 id：${missing.join('、')}`)
     const planIds = input.planIds ?? []
-    const missingPlans = planIds.filter((id) => typeof products[id] !== 'string' || !products[id])
-    if (missingPlans.length) error(productsKey, `${productsKey} 缺少订阅套餐的商品 id：${missingPlans.join('、')}（订阅商品要按周期单独建）`)
+    // PayPal 按订单金额收积分包，不要求后台商品目录。订阅不走这条通道。
+    if (payment !== 'paypal') {
+      const missing = input.packageIds.filter((id) => typeof products[id] !== 'string' || !products[id])
+      if (missing.length) error(productsKey, `${productsKey} 缺少积分包的商品 id：${missing.join('、')}`)
+      const missingPlans = planIds.filter((id) => typeof products[id] !== 'string' || !products[id])
+      if (missingPlans.length) error(productsKey, `${productsKey} 缺少订阅套餐的商品 id：${missingPlans.join('、')}（订阅商品要按周期单独建）`)
+    }
     // Waffo 的客户门户（换卡、恢复订阅）要店铺 ID；没有它扣款失败的用户无法自助更新付款方式
     if (payment === 'waffo' && planIds.length && !vars('WAFFO_STORE_ID')) {
       error('WAFFO_STORE_ID', 'WAFFO_STORE_ID 为空：开了订阅时，账单页的“管理付款”打不开，扣款失败的用户无法换卡')
     }
-    const live = payment === 'waffo' ? ['prod', 'production'].includes(vars('WAFFO_ENVIRONMENT')) : vars(`${payment.toUpperCase()}_ENVIRONMENT`) === 'live'
+    const hook = input.secrets.PAYPAL_WEBHOOK_ID
+    if (payment === 'paypal' && typeof hook === 'string' && text(hook) === 'WEBHOOK_ID') {
+      error('PAYPAL_WEBHOOK_ID', 'PAYPAL_WEBHOOK_ID 仍是占位值 WEBHOOK_ID，验签会拒绝所有回调')
+    }
+    const modeRaw = vars('PAYPAL_MODE')
+    const paypalMode = (modeRaw || 'sandbox').toLowerCase()
+    if ((payment === 'paypal' || modeRaw) && paypalMode !== 'sandbox' && paypalMode !== 'live') {
+      error('PAYPAL_MODE', `PAYPAL_MODE=${modeRaw}：只能是 sandbox 或 live`)
+    }
+    const paypalBase = vars('PAYPAL_API_BASE').replace(/\/+$/, '')
+    if (paypalBase) {
+      const expected = paypalMode === 'live' ? PAYPAL_HOSTS.live : paypalMode === 'sandbox' ? PAYPAL_HOSTS.sandbox : ''
+      if (!expected || paypalBase !== expected) error('PAYPAL_API_BASE', `PAYPAL_API_BASE 只能是官方主机${expected ? ` ${expected}` : ''}`)
+    }
+    const live = payment === 'waffo' ? ['prod', 'production'].includes(vars('WAFFO_ENVIRONMENT')) : payment === 'paypal' ? paypalMode === 'live' : vars(`${payment.toUpperCase()}_ENVIRONMENT`) === 'live'
+    const envKey = payment === 'paypal' ? 'PAYPAL_MODE' : `${payment.toUpperCase()}_ENVIRONMENT`
     // Stripe 的 test / live Key 前缀不同（sk_test_、rk_test_ / sk_live_、rk_live_），和 STRIPE_ENVIRONMENT 不符时 webhook 的 livemode 核对会拒收所有事件
     const stripeKey = input.secrets.STRIPE_SECRET_KEY
     if (payment === 'stripe' && typeof stripeKey === 'string' && text(stripeKey)) {
@@ -137,7 +160,6 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
       if (!keyMode) error('STRIPE_SECRET_KEY', 'STRIPE_SECRET_KEY 不是 sk_ 或 rk_ 开头的 Stripe 密钥')
       else if (keyMode !== (live ? 'live' : 'test')) error('STRIPE_SECRET_KEY', `STRIPE_SECRET_KEY 是 ${keyMode} 模式的 Key，但 STRIPE_ENVIRONMENT=${vars('STRIPE_ENVIRONMENT') || '(空)'}`)
     }
-    const envKey = `${payment.toUpperCase()}_ENVIRONMENT`
     if (production && !live) warn(envKey, `${envKey}=${vars(envKey) || '(空)'}：仍是 test 模式，不会真实收款`)
     if (!production && live) warn(envKey, `${envKey} 是正式模式，但 APP_ENV 不是 production：预发应使用 test 店铺`)
   }

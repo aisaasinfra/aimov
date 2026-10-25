@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { findDuration, findPackage, findPlan, isLocale, localePath, sellingPlans, site } from '#/config/site'
+import { findDuration, findPackage, findPlan, findVideoTemplate, isLocale, localePath, sellingPlans, site } from '#/config/site'
 import { safeRedirectPath } from '#/lib/redirect'
 import { exportFileName, exportUserData } from './account-export'
 import { adminRoutes } from './admin'
@@ -27,9 +27,10 @@ import { assertShareable, findSharedGeneration, loadShare, readSharePoster, star
 import { notifyContactMessage, runTakedownReminders } from './notifications'
 import { normalizeDodoEvent, verifyDodoWebhook } from './payments/dodo'
 import { expandStripeEvent, normalizeStripeEvent, verifyStripeWebhook } from './payments/stripe'
-import { getOrderProvider, getPaymentProvider, mockPaidKey } from './payments'
+import { checkoutChannels, defaultCheckoutChannel, getOrderProvider, mockPaidKey, resolveCheckoutChannel } from './payments'
 import type { PaymentEvent } from './payments/types'
 import { WebhookVerificationError } from './payments/types'
+import { captureApprovedPaypalOrder, normalizePaypalEvent, verifyPaypalWebhook } from './payments/paypal'
 import { normalizeWaffoEvent, verifyWaffoWebhook, waffoEnvironment } from './payments/waffo'
 import { sweepExpiredMedia } from './retention'
 import {
@@ -110,12 +111,20 @@ app.post(CLIENT_ERROR_PATH, async (c) => {
 
 app.get('/api/me', async (c) => {
   const user = c.get('user')
+  const paymentChannels = checkoutChannels(c.env)
+  let paymentProvider = c.env.PAYMENT_PROVIDER
+  try {
+    paymentProvider = defaultCheckoutChannel(c.env)
+  } catch {
+    // 生产环境 mock 没有可用通道。把原始配置交出去，巡检才能看见它仍是 mock。
+  }
   return c.json({
     user: user ? publicUser(user) : null,
     config: {
       googleClientId: googleClientId(c.env) ?? null,
       devLogin: !isProduction(c.env),
-      paymentProvider: c.env.PAYMENT_PROVIDER,
+      paymentProvider,
+      paymentChannels,
       turnstileSiteKey: turnstileSiteKey(c.env),
       notice: publicNotice(await getSettings(c.env)),
     },
@@ -285,8 +294,12 @@ app.post('/api/generations', async (c) => {
   const settings = await getSettings(c.env)
   assertOpen(settings, user)
   await rateLimit(c.env.GENERATE_LIMITER, user.id)
-  const body = await readJson<{ uploadId: string; durationId: string; mockOutcome: string; locale: string }>(c)
-  const duration = findDuration(body.durationId ?? '')
+  const body = await readJson<{ uploadId: string; durationId: string; mockOutcome: string; locale: string; templateId?: string }>(c)
+  const requestedTemplate = typeof body.templateId === 'string' ? body.templateId.trim() : ''
+  const template = requestedTemplate ? findVideoTemplate(requestedTemplate) : undefined
+  if (requestedTemplate && !template) throw new ApiError(400, 'invalid_template')
+  if (template && body.durationId && template.durationId !== body.durationId) throw new ApiError(400, 'invalid_duration')
+  const duration = findDuration(template?.durationId ?? body.durationId ?? '')
   if (!duration) throw new ApiError(400, 'invalid_duration')
   const db = c.env.DB
   const upload = await db
@@ -316,7 +329,7 @@ app.post('/api/generations', async (c) => {
            status, provider, provider_meta, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
         )
-        .bind(id, user.id, site.template.id, duration.id, duration.seconds, duration.credits, upload.id, providerId, meta, now, now),
+        .bind(id, user.id, template?.id ?? site.template.id, duration.id, duration.seconds, duration.credits, upload.id, providerId, meta, now, now),
       ...ledgerStatements(db, {
         userId: user.id,
         delta: -duration.credits,
@@ -480,7 +493,7 @@ app.post('/api/checkout', async (c) => {
   const user = requireUser(c)
   assertOpen(await getSettings(c.env), user)
   await rateLimit(c.env.AUTH_LIMITER, `checkout:${user.id}`)
-  const body = await readJson<{ packageId: string; locale: string }>(c)
+  const body = await readJson<{ packageId: string; locale: string; channel?: string }>(c)
   // packageId 可以是积分包或在售的订阅套餐（订阅开关关掉时套餐不能再下单）
   const pack = findPackage(body.packageId ?? '') ?? sellingPlans.find((p) => p.id === body.packageId)
   if (!pack) throw new ApiError(400, 'invalid_package')
@@ -488,7 +501,10 @@ app.post('/api/checkout', async (c) => {
   if (findPlan(pack.id) && (await liveSubscription(c.env.DB, user.id))) throw new ApiError(409, 'subscription_exists')
   const locale = isLocale(body.locale) ? body.locale : 'en'
   await rememberLocale(c.env, user, body.locale)
-  const provider = getPaymentProvider(c.env)
+  // 先定通道再插订单：PayPal 只卖积分包，选错时不留下 pending 订单
+  const channel = resolveCheckoutChannel(c.env, typeof body.channel === 'string' ? body.channel : undefined, pack.id)
+  const provider = getOrderProvider(c.env, channel)
+  if (!provider) throw new ApiError(503, 'payment_not_configured', `Unsupported channel: ${channel}`)
   const id = createId('ord')
   const now = nowIso()
   const attr = requestAttribution(c, 'last')
@@ -788,6 +804,15 @@ app.post('/api/webhooks/stripe', async (c) => {
   const raw = await c.req.text()
   const payload = await verifyStripeWebhook(raw, c.req.header('stripe-signature'), c.env.STRIPE_WEBHOOK_SECRET, c.env.STRIPE_ENVIRONMENT)
   const result = await processPaymentEvent(c.env, 'stripe', normalizeStripeEvent(await expandStripeEvent(c.env, payload)), raw)
+  return c.json({ received: true, ...result })
+})
+
+// PayPal：CHECKOUT.ORDER.APPROVED 只 capture，入账等 PAYMENT.CAPTURE.COMPLETED（或成功页查单）
+app.post('/api/webhooks/paypal', async (c) => {
+  const raw = await c.req.text()
+  const payload = await verifyPaypalWebhook(raw, c.req.raw.headers, c.env)
+  await captureApprovedPaypalOrder(c.env, payload)
+  const result = await processPaymentEvent(c.env, 'paypal', normalizePaypalEvent(payload), raw)
   return c.json({ received: true, ...result })
 })
 

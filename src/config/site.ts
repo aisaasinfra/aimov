@@ -13,9 +13,9 @@ export const LOCALE_META: Record<Locale, { tag: string; ogLocale: string; name: 
 }
 
 export const site = {
-  keyword: 'Neon Shuffle',
-  brandName: 'Neon Shuffle AI',
-  logoMark: 'NS',
+  keyword: 'Christmas Video',
+  brandName: 'aimov',
+  logoMark: 'av',
   domain: 'example.com',
   supportEmail: 'support@example.com',
   // 社媒平台名称（用于 “Viral on TikTok” 之类标签）
@@ -25,7 +25,7 @@ export const site = {
   // 生成模板：provider 输出时长 = 源视频时长，所以每个时长档位各有一段剪好的源视频。
   // 源视频上传到 R2 的 templates/<文件名>，由 /media/templates/<文件名> 公开提供给 provider 拉取。
   template: {
-    id: 'neon-shuffle-v1',
+    id: 'christmas-video-v1',
     aspectRatio: '9:16',
     fullSeconds: 18,
   },
@@ -58,7 +58,7 @@ export const site = {
     // yir.ai 网关（可选，VIDEO_PROVIDER=yir）：照片 + 源视频走 Kling Motion Control。prompt 按热词写清要保留什么。
     yir: {
       model: 'klingai/kling-2.6',
-      prompt: 'The person in the reference image performs the exact moves from the reference video. Keep their face, hair and outfit.',
+      prompt: 'The person in the reference image performs the exact moves from the reference video. Keep their face, hair and outfit. This is a Christmas holiday video.',
       resolution: '720p',
       // 成本估算（美分/秒），只在出片时 yir 账单还没结算时用。按参考视频秒数计费，以 https://yir.ai/models 当前报价为准
       costCentsPerSecond: 7,
@@ -75,6 +75,16 @@ export const site = {
     { id: 'short', seconds: 6, credits: 6, source: 'neon-shuffle-v1-6s.mp4' },
     { id: 'medium', seconds: 12, credits: 12, source: 'neon-shuffle-v1-12s.mp4' },
     { id: 'full', seconds: 18, credits: 18, source: 'neon-shuffle-v1-18s.mp4', isFull: true },
+  ],
+
+  // 首页可选的圣诞视频模板。时长和计费仍走 durations；预览用 public/demo 里的成片。
+  videoTemplates: [
+    { id: 'hearth', durationId: 'short', poster: '/demo/original.jpg', preview: '/demo/original.mp4' },
+    { id: 'snowfall', durationId: 'medium', poster: '/demo/ai1.jpg', preview: '/demo/ai1.mp4' },
+    { id: 'market', durationId: 'full', poster: '/demo/ai2.jpg', preview: '/demo/ai2.mp4' },
+    { id: 'carolers', durationId: 'short', poster: '/demo/madeWith.jpg', preview: '/demo/madeWith.mp4' },
+    { id: 'window', durationId: 'medium', poster: '/demo/ai1.jpg', preview: '/demo/madeWith.mp4' },
+    { id: 'night-ride', durationId: 'full', poster: '/demo/original.jpg', preview: '/demo/ai2.mp4' },
   ],
 
   // 积分包：一次性购买，买的积分永不过期（赠送积分可以设有效期，扣费时先扣快到期的）。价格用于展示与订单记录，实际收费以支付商后台为准。
@@ -134,16 +144,16 @@ export const site = {
   // trend、howTo 两篇被首页直接链接，不要删。related 不填时推荐其余文章里最近更新的。
   // 日期写进 Article 的 datePublished/dateModified、页面上的“最后更新”和 sitemap lastmod，改正文时同步改 updatedAt
   articles: [
-    { key: 'trend', slug: 'neon-shuffle-ai-trend', publishedAt: '2026-10-20', updatedAt: '2026-10-20' },
-    { key: 'howTo', slug: 'how-to-make-neon-shuffle-ai-video', publishedAt: '2026-10-20', updatedAt: '2026-10-20' },
+    { key: 'trend', slug: 'christmas-video-ai-trend', publishedAt: '2026-10-20', updatedAt: '2026-10-25' },
+    { key: 'howTo', slug: 'how-to-make-a-christmas-video', publishedAt: '2026-10-20', updatedAt: '2026-10-25' },
   ],
 
   seo: {
     // 长尾词：不输出 meta keywords（Google 不用），由 npm run seo:check 检查首页正文是否覆盖
-    secondaryKeywords: ['Neon Shuffle AI', 'Neon Shuffle video', 'Neon Shuffle trend', 'AI dance video'],
+    secondaryKeywords: ['Christmas video AI', 'Christmas video template', 'holiday video', 'Merry Christmas video'],
     // 首次上线日期与站点页面（首页、价格、法律页等）最近一次内容更新日期：首页视频 uploadDate、sitemap lastmod。文章用各自的日期
     publishedAt: '2026-10-20',
-    updatedAt: '2026-10-20',
+    updatedAt: '2026-10-25',
     // Search Console / Bing Webmaster 选“HTML 标记”验证时填 content 值；用 DNS 验证则留空
     googleVerification: '',
     bingVerification: '',
@@ -164,6 +174,7 @@ export const site = {
 } as const
 
 export type DurationOption = (typeof site.durations)[number]
+export type VideoTemplate = (typeof site.videoTemplates)[number]
 export type CreditPackage = (typeof site.packages)[number]
 
 export interface YirSceneConfig {
@@ -188,6 +199,10 @@ export interface SubscriptionPlan {
 
 export function findDuration(id: string) {
   return site.durations.find((d) => d.id === id)
+}
+
+export function findVideoTemplate(id: string) {
+  return site.videoTemplates.find((template) => template.id === id)
 }
 
 export function findPackage(id: string) {

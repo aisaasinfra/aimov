@@ -196,6 +196,7 @@ SMOKE_BASE_URL=https://video-template-staging.<subdomain>.workers.dev SMOKE_EXPE
 | Waffo Pancake | Dashboard → Settings → Webhooks | `https://<domain>/api/webhooks/waffo` |
 | Dodo Payments | Dashboard → Webhooks | `https://<domain>/api/webhooks/dodo` |
 | Stripe | Developers → Webhooks (or `stripe-setup.mjs --webhook`) | `https://<domain>/api/webhooks/stripe` |
+| PayPal / PayPal.cn | Developer Dashboard → Apps → Webhooks | `https://<domain>/api/webhooks/paypal` |
 | fal.ai | Added by the code | `https://<domain>/api/webhooks/fal` |
 | yir.ai | Added by the code (https URLs only; local dev relies on polling) | `https://<domain>/api/webhooks/yir` |
 
@@ -204,7 +205,7 @@ SMOKE_BASE_URL=https://video-template-staging.<subdomain>.workers.dev SMOKE_EXPE
   - Each payment can be refunded once (partial allowed), within 14 days of payment. The admin blocks this up front with `waffo_refund_exists` / `refund_window_expired`.
   - If a webhook is lost, use "record only" with the `REF_` refund id (`TKT_` is rejected, otherwise the late webhook would claw back credits a second time).
   - Webhooks are delivered by Upstash QStash and retries only go to the URL set at creation, so use a stable domain.
-- **Testing real webhooks locally**: `node scripts/webhook-proxy.mjs --port 3100` forwards only `POST /api/webhooks/{waffo,dodo,stripe}`; point the tunnel at it instead of exposing the dev server. Pinggy works (`ssh -p 443 -R0:127.0.0.1:3100 qr@a.pinggy.io`, 60 minutes on the free plan); localhost.run dropped often. To run the checkout and webhooks end to end with sandbox e2e, see [docs/payments.md](docs/payments.md).
+- **Testing real webhooks locally**: `node scripts/webhook-proxy.mjs --port 3100` forwards only `POST /api/webhooks/{waffo,dodo,stripe,paypal}`; point the tunnel at it instead of exposing the dev server. Pinggy works (`ssh -p 443 -R0:127.0.0.1:3100 qr@a.pinggy.io`, 60 minutes on the free plan); localhost.run dropped often. To run the checkout and webhooks end to end with sandbox e2e, see [docs/payments.md](docs/payments.md).
 - **Dodo**: `DODO_ENVIRONMENT` is `test` or `live`. Webhooks are verified per Standard Webhooks; `DODO_WEBHOOK_SECRET` is the `whsec_...` value from the dashboard.
   - API keys are scoped per resource: `dodo-setup.mjs` needs Products write, plus Webhooks write with `--webhook`; at runtime the key needs Checkout sessions and Refunds write, plus read access to Checkout sessions and Payments for order reconciliation; selling subscriptions also needs Subscriptions write (cancel and undo), Customers write (customer portal) and Subscriptions read.
   - Merchants can refund within 30 days of payment, in several partial refunds, but only one at a time ([docs](https://docs.dodopayments.com/features/transactions/refunds)). After 30 days the admin returns `refund_window_expired`.
@@ -216,6 +217,9 @@ SMOKE_BASE_URL=https://video-template-staging.<subdomain>.workers.dev SMOKE_EXPE
 - **Stripe**: `STRIPE_ENVIRONMENT` is `test` or `live` and must match the key prefix (`sk_test_` / `sk_live_`) and the webhook's `livemode`. `STRIPE_PRODUCTS` maps packs and plans to Price ids. Webhooks are verified with `STRIPE_WEBHOOK_SECRET` (`whsec_...`), then checkout sessions and invoices are fetched again with the pinned API version before crediting.
   - Stripe is not a Merchant of Record: you are responsible for sales tax and invoices. Refunds have no fixed window and can be partial several times; they are paid from your Stripe balance and wait as pending when it is short.
   - Subscriptions are credited on `invoice.paid`. The customer portal only opens after you save its settings once in Settings → Billing → Customer portal. Restricted keys (`rk_`) need the permissions listed under "Stripe" in [docs/payments.md](docs/payments.md).
+- **PayPal / PayPal.cn**: same global Orders v2 hosts (`PAYPAL_MODE=sandbox|live`). There is no separate China API. Credit packs only; plans stay on Waffo (or Dodo/Stripe if that is the configured provider). Secrets: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID` (not the literal `WEBHOOK_ID`). `PAYPAL_PRODUCTS` may stay `{}`.
+  - Subscribe the webhook to `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DENIED`, `PAYMENT.CAPTURE.REFUNDED`, `PAYMENT.CAPTURE.REVERSED` and `PAYMENT.CAPTURE.PARTIALLY_REFUNDED`. Credits are granted only on a completed capture. Refunds are allowed for 180 days and can be partial more than once.
+  - Verification uses the transmission headers and PayPal's certificate (RSA-SHA256 over the CRC-32 of the raw body). Details are in [docs/payments.md](docs/payments.md). No sandbox e2e yet.
 - **fal, yir**: the webhook is only a "go check now" signal; results are always fetched again with `FAL_KEY` or `YIR_API_KEY`. A Cron every 5 minutes also polls stuck jobs and fails them (with a credit refund) after 45 minutes.
 
 ## Design notes

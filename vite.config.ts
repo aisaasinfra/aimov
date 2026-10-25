@@ -20,6 +20,7 @@ const LOCAL_DEV_VARS = {
   WAFFO_ENVIRONMENT: 'test',
   DODO_ENVIRONMENT: 'test',
   STRIPE_ENVIRONMENT: 'test',
+  PAYPAL_MODE: 'sandbox',
   ADMIN_EMAILS: 'admin@example.com',
   // 本地 send_email binding 只模拟发送；站点上线前 EMAIL_FROM 可能留空，e2e 的邮件用例仍要有发件地址
   EMAIL_FROM: 'noreply@example.com',

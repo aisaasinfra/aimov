@@ -92,6 +92,15 @@ describe('assertProviderRefundAllowed', () => {
     expect(() => assertProviderRefundAllowed(order('dodo', 330), now)).not.toThrow()
     expect(() => assertProviderRefundAllowed(order('dodo', 330), now + 1)).toThrow(expect.objectContaining({ status: 409, code: 'refund_window_expired' }))
   })
+
+  it('PayPal 可多次退款，窗口为 180 天，退款单号不要求固定前缀', () => {
+    const paypal = { provider: 'paypal' as const, refunded_amount_cents: 100, paid_at: paidAt }
+    const now = Date.parse(paidAt) + 180 * day
+    expect(() => assertProviderRefundAllowed(paypal, now)).not.toThrow()
+    expect(() => assertProviderRefundAllowed(paypal, now + 1)).toThrow(expect.objectContaining({ code: 'refund_window_expired' }))
+    expect(localRefundKey(paypal, 'R-8', 100)).toBe('R-8')
+    expect(() => localRefundKey(paypal, undefined, 100)).toThrow(expect.objectContaining({ code: 'refund_id_required' }))
+  })
 })
 
 // 付款回调入账前核对：只拦买错商品和同币种少付；换币种、折扣码、缺字段时不误拦

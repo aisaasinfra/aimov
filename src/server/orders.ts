@@ -167,7 +167,9 @@ export function checkPaidEvent(
 }
 
 function providerProducts(env: Env, provider: PaymentProviderId) {
-  return parseJsonRecord(provider === 'dodo' ? env.DODO_PRODUCTS : provider === 'waffo' ? env.WAFFO_PRODUCTS : provider === 'stripe' ? env.STRIPE_PRODUCTS : undefined)
+  return parseJsonRecord(
+    provider === 'dodo' ? env.DODO_PRODUCTS : provider === 'waffo' ? env.WAFFO_PRODUCTS : provider === 'stripe' ? env.STRIPE_PRODUCTS : provider === 'paypal' ? env.PAYPAL_PRODUCTS : undefined,
+  )
 }
 
 function expectedProductId(env: Env, provider: PaymentProviderId, packageId: string) {
@@ -319,7 +321,8 @@ async function applySubscriptionRenewal(
     event,
     expectedProductId(env, provider, sub.plan_id),
   )
-  // 周期：支付商给了就用；没给（Waffo）时，若状态事件已先把订阅推进到新的一期就沿用，否则从付款时间起算一期
+  // 周期：支付商给了就用。没给且当期结束还早于一天时沿用现有日期（状态事件可能已经推进到新的一期）；
+  // 否则从付款时间起算一期。年付在沿用日期时，只有“新周期等首月”才入账，见下面的 openingGrantWaiting。
   const keepPeriod =
     !charge.periodStart && sub.current_period_start && sub.current_period_end && Date.parse(sub.current_period_end) > Date.now() + 86400_000
   const periodStart = charge.periodStart ?? (keepPeriod ? sub.current_period_start! : now)
@@ -365,6 +368,19 @@ async function applySubscriptionRenewal(
       if (!isUniqueConstraintError(error)) throw error
     }
     return { status: 'mismatch', orderId, note: mismatch }
+  }
+  // 年付扣款没带新周期、当期结束还早于一天，并且这一期并不是刚被状态事件打开的新周期：
+  // 保持现有周期和 grants_done，不再发一轮积分。Waffo 的 payment_succeeded 不带周期，
+  // 年付大部分时间都还开着，一条新的 payment id 否则会把 grants_done 打回 1，Cron 再按新订单补发。
+  // 状态事件已经把周期起点推到最近 3 天、并且停掉了月补发（next_grant_at 为空）时，这次扣款是新周期的首月，仍要入账。
+  const boundsMissing = !charge.periodStart && !charge.periodEnd
+  const periodEndMs = sub.current_period_end ? Date.parse(sub.current_period_end) : Number.NaN
+  const periodOpen = Number.isFinite(periodEndMs) && periodEndMs > Date.now() + 86400_000
+  const periodStartMs = sub.current_period_start ? Date.parse(sub.current_period_start) : Number.NaN
+  const periodStartRecent = Number.isFinite(periodStartMs) && Math.abs(periodStartMs - Date.now()) < 3 * 86400_000
+  const openingGrantWaiting = sub.interval === 'year' && sub.next_grant_at == null && periodStartRecent
+  if (boundsMissing && periodOpen && sub.interval === 'year' && !openingGrantWaiting) {
+    return { status: 'ignored', orderId: sub.current_order_id, note: 'open yearly period kept; no second grant' }
   }
   try {
     await db.batch([
@@ -545,7 +561,8 @@ export function localRefundKey(order: Pick<OrderRow, 'provider' | 'refunded_amou
 // - Waffo：支付后 14 天内，每笔支付只能有一次退款（可部分），第二次返回 409。已退过还要再退只能线下处理，再用"仅记账"补登
 // - Dodo：支付后 30 天内，可多次部分退款（同一时间只能有一笔处理中）https://docs.dodopayments.com/features/transactions/refunds
 // - Stripe：没有固定期限，可多次部分退款；从 Stripe 余额扣，余额不足时挂起为 pending，等 succeeded 的 webhook 再回收积分 https://docs.stripe.com/refunds
-const REFUND_WINDOW_DAYS: Record<string, number> = { waffo: 14, dodo: 30 }
+// - PayPal：支付后 180 天内可退（可部分）。积分等 PAYMENT.CAPTURE.REFUNDED webhook，不在提交退款时扣
+const REFUND_WINDOW_DAYS: Record<string, number> = { waffo: 14, dodo: 30, paypal: 180 }
 export function assertProviderRefundAllowed(order: Pick<OrderRow, 'provider' | 'refunded_amount_cents' | 'paid_at'>, now = Date.now()) {
   if (order.provider === 'waffo' && order.refunded_amount_cents > 0) throw new ApiError(409, 'waffo_refund_exists')
   const days = REFUND_WINDOW_DAYS[order.provider]

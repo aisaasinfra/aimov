@@ -5,6 +5,7 @@ import { audit, requireAdmin } from './http'
 import { getModerationProvider } from './moderation'
 import { activePaymentProviderId, getPaymentProvider } from './payments'
 import { dodoBaseUrl } from './payments/dodo'
+import { paypalAccessToken, paypalMode, paypalWebhookId } from './payments/paypal'
 import { STRIPE_API_VERSION } from './payments/stripe'
 import { waffoEnvironment } from './payments/waffo'
 import type { AppContext, UserRow } from './types'
@@ -71,6 +72,11 @@ async function probeEmail(env: Env, admin: UserRow): Promise<Outcome> {
 async function probePayment(env: Env): Promise<Outcome> {
   const id = activePaymentProviderId(env)
   if (id === 'mock') return ok('mock 支付，不调用外部接口')
+  if (id === 'paypal') {
+    if (!paypalWebhookId(env)) return fail('PAYPAL_WEBHOOK_ID 未配置或仍是占位值 WEBHOOK_ID')
+    await paypalAccessToken(env)
+    return ok(`PayPal OAuth 正常（${paypalMode(env)}，只卖积分包，不需要商品目录）`)
+  }
   const products = parseJsonRecord(id === 'dodo' ? env.DODO_PRODUCTS : id === 'stripe' ? env.STRIPE_PRODUCTS : env.WAFFO_PRODUCTS)
   // 积分包和订阅套餐都要有商品
   const items = [...site.packages, ...sellingPlans]

@@ -1,7 +1,7 @@
 import { useRouterState } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { anchorPrice, formatPrice, sellingPlans, site, type SubscriptionPlan } from '#/config/site'
+import { anchorPrice, findPlan, formatPrice, sellingPlans, site, type SubscriptionPlan } from '#/config/site'
 import { api, errorCode } from '#/lib/api'
 import { track } from '#/lib/attribution'
 import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
@@ -17,6 +17,9 @@ export function Pricing() {
   const { user, config, loading } = useSession()
   const [pending, setPending] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const channels = config?.paymentChannels ?? []
+  const showChannels = channels.includes('waffo') && channels.includes('paypal')
+  const [packChannel, setPackChannel] = useState('waffo')
   const shortest = site.durations[0]!
 
   async function buy(packageId: string) {
@@ -34,8 +37,10 @@ export function Pricing() {
         items: [{ item_id: pack.id, item_name: pack.id, quantity: 1 }],
       })
     }
+    const plan = !!findPlan(packageId) && sellingPlans.some((item) => item.id === packageId)
+    const channel = showChannels ? (plan ? channels.find((id) => id !== 'paypal') : packChannel) : undefined
     try {
-      const data = await api<{ orderId: string; url: string }>('/api/checkout', { json: { packageId, locale } })
+      const data = await api<{ orderId: string; url: string }>('/api/checkout', { json: { packageId, locale, ...(channel ? { channel } : {}) } })
       location.href = data.url
     } catch (err) {
       setError(errorCode(err))
@@ -80,6 +85,29 @@ export function Pricing() {
           <p className="text-center text-xs text-muted">{p.renewalNote}</p>
           <h3 className="pt-6 text-center font-display text-2xl">{p.packsTitle}</h3>
         </>
+      ) : null}
+      {showChannels ? (
+        <div className="mx-auto max-w-md space-y-2 text-center" data-testid="pay-channels">
+          <p className="text-sm font-semibold">{p.payWith}</p>
+          <div className="flex justify-center gap-2" role="radiogroup" aria-label={p.payWith}>
+            {channels
+              .filter((id) => id === 'waffo' || id === 'paypal')
+              .map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={packChannel === id}
+                  data-testid={`pay-channel-${id}`}
+                  onClick={() => setPackChannel(id)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${packChannel === id ? 'bg-ink text-ink-fg' : 'border border-line bg-card'}`}
+                >
+                  {p.channels[id] ?? id}
+                </button>
+              ))}
+          </div>
+          <p className="text-xs text-muted">{p.channelNote}</p>
+        </div>
       ) : null}
       <div className="grid gap-5 md:grid-cols-3">
         {site.packages.map((pack) => {

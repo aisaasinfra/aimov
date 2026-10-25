@@ -5,35 +5,35 @@
 
 /* 颜色全部走 CSS 变量：换站时改这里的几行即可换肤 */
 :root {
-  --bg: #f7f4ee;
-  --bg-soft: #efe9df;
-  --card: #fffdf9;
-  --fg: #1d1a16;
-  --muted: #6d665c;
-  --line: #e4ddd1;
-  --ink: #1d1a16;
-  --ink-fg: #fbf8f2;
-  --accent: #e0306f;
+  --bg: #f6f1e7;
+  --bg-soft: #efe6d6;
+  --card: #fffaf3;
+  --fg: #1e3a2f;
+  --muted: #5c6b62;
+  --line: #e3d7c4;
+  --ink: #1e3a2f;
+  --ink-fg: #f6f1e7;
+  --accent: #9b2c3a;
   /* 小号强调文字用：对 --bg 的对比度需 ≥ 4.5:1（WCAG AA），--accent 只适合图标、大字和背景 */
-  --accent-text: #c41f5c;
-  --accent-2: #00b8d9;
-  --glow: rgba(224, 48, 111, 0.12);
+  --accent-text: #7a1f2c;
+  --accent-2: #2f6b4f;
+  --glow: rgba(155, 44, 58, 0.14);
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --bg: #12110f;
-  --bg-soft: #1b1916;
-  --card: #1c1a17;
-  --fg: #f2ede4;
-  --muted: #a39b8f;
-  --line: #2f2b26;
-  --ink: #f2ede4;
-  --ink-fg: #12110f;
-  --accent: #ff4f8b;
-  --accent-text: #ff4f8b;
-  --accent-2: #2fd6f5;
-  --glow: rgba(255, 79, 139, 0.14);
+  --bg: #12201a;
+  --bg-soft: #1a2b24;
+  --card: #1c2e26;
+  --fg: #f3eadc;
+  --muted: #c4b8a6;
+  --line: #2d453b;
+  --ink: #f3eadc;
+  --ink-fg: #12201a;
+  --accent: #e06a78;
+  --accent-text: #f3b4bb;
+  --accent-2: #7dcea0;
+  --glow: rgba(224, 106, 120, 0.18);
   color-scheme: dark;
 }
 

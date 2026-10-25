@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { site } from '#/config/site'
+import { resetPaypalForTests } from '#/server/payments/paypal'
 import { runProbe } from '#/server/probes'
 import type { UserRow } from '#/server/types'
 import { kvShim } from './d1-sqlite'
@@ -53,6 +54,7 @@ const stripePrice = (override: Record<string, Record<string, unknown>> = {}) => 
 const probe = (target: Parameters<typeof runProbe>[1], env: Record<string, unknown>) => runProbe(env as unknown as Env, target, admin)
 
 afterEach(() => {
+  resetPaypalForTests()
   vi.unstubAllGlobals()
 })
 
@@ -134,6 +136,23 @@ describe('支付探测', () => {
       expect(denied.message).not.toContain(STRIPE_KEY)
     }
     expect(await probe('payment', { PAYMENT_PROVIDER: 'stripe', STRIPE_PRODUCTS })).toMatchObject({ status: 'fail', message: 'STRIPE_SECRET_KEY 未配置' })
+  })
+
+  it('PayPal：OAuth 成功即可，不要求商品目录；webhook id 缺失或是占位值时失败', async () => {
+    const env = {
+      PAYMENT_PROVIDER: 'paypal',
+      PAYPAL_MODE: 'sandbox',
+      PAYPAL_CLIENT_ID: 'paypal-client',
+      PAYPAL_CLIENT_SECRET: 'paypal-secret-value',
+      PAYPAL_WEBHOOK_ID: 'WH-123',
+    }
+    const calls = stubFetch({ '/v1/oauth2/token': { body: { access_token: 'tok', expires_in: 300 } } })
+    const result = await probe('payment', env)
+    expect(result).toMatchObject({ status: 'ok', provider: 'paypal' })
+    expect(result.message).toContain('积分包')
+    expect(calls[0]?.url).toBe('https://api-m.sandbox.paypal.com/v1/oauth2/token')
+    expect(await probe('payment', { ...env, PAYPAL_WEBHOOK_ID: 'WEBHOOK_ID' })).toMatchObject({ status: 'fail' })
+    expect(await probe('payment', { PAYMENT_PROVIDER: 'paypal' })).toMatchObject({ status: 'fail' })
   })
 
   it('mock 不调用外部接口；生产环境配了 mock 时报 fail 而不是抛错', async () => {

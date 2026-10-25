@@ -253,14 +253,14 @@ e2e 跑在本地 dev server 上，支付、视频、审核服务商都是 mock�
 
 这些逻辑依赖外部服务或需要穷举边界，放在 `tests/unit`：
 
-- 支付商对接：Waffo、Dodo、Stripe 的验签（篡改、重放、时间窗、test/live 不符、密钥轮换）、事件映射和查单（`waffo.test.ts`、`dodo.test.ts`、`stripe.test.ts`）。Stripe 另测验签后按固定 API 版本重取对象、折扣与少付、订阅首付以 `invoice.paid` 为准、退款按 `re_` 幂等。
+- 支付商对接：Waffo、Dodo、Stripe、PayPal 的验签（篡改、重放或模式不符、密钥轮换）、事件映射和查单（`waffo.test.ts`、`dodo.test.ts`、`stripe.test.ts`、`paypal.test.ts`）。Stripe 另测验签后按固定 API 版本重取对象、折扣与少付、订阅首付以 `invoice.paid` 为准、退款按 `re_` 幂等。PayPal 只卖积分包：CRC-32 十进制验签、证书地址白名单、审批地址只接受 paypal.com / paypal.cn、`CHECKOUT.ORDER.APPROVED` 不入账。
 - 退款规则：比例与四舍五入、按币种换算、退款单号格式、各支付商的退款期限、金额与商品核对（`refunds.test.ts`）。
 - 积分账务：先到期先扣、余额不足整体回滚、明细原路退回、Cron 作废幂等、退款先扣该订单的批次、迁移前的旧余额与旧任务，每步核对流水之和 = 缓存余额 = 批次剩余之和（`credits.test.ts`，在 `node:sqlite` 上执行全部迁移）。
 - 兑换码：码的生成、展示与输入规范化；兑换后的批次与有效期，重复、用完、停用、截止的错误码；预检查之后状态变化（并发用完、刚被停用）由 batch 内断言兜底（`redeem.test.ts`）。
 - 邀请奖励：邀请码规范化、IP 加盐哈希（IPv6 按 /64）；邀请人被封禁或注销、30 天奖励上限（已回收的也计入）；同一被邀请人两单并发入账只发一次、两笔退款并发只回收一次、邀请人已花掉的最多扣到 0（`referrals.test.ts`）。
-- 订阅：日历月相加（月末、闰年）、年付补发窗口与跳过已过期的月份；首付、续费订单号派生、续费金额核对、逾期恢复；首付不带周期时状态事件校正周期，当期积分的到期时间一起对齐；状态事件按发生时间防乱序、到期取消且当期结束后不再算有效订阅；退款只回收订阅批次并停止补发；Dodo、Waffo 订阅事件的映射（`subscriptions.test.ts`；Stripe 的在 `stripe.test.ts`）。
+- 订阅：日历月相加（月末、闰年）、年付补发窗口与跳过已过期的月份；首付、续费订单号派生、续费金额核对、逾期恢复；首付不带周期时状态事件校正周期，当期积分的到期时间一起对齐；年付当期还开着且扣款不带新周期时不重置 `grants_done`、不再发一轮积分（刚被状态事件打开的新周期仍发首月）；状态事件按发生时间防乱序、到期取消且当期结束后不再算有效订阅；退款只回收订阅批次并停止补发；Dodo、Waffo 订阅事件的映射（`subscriptions.test.ts`；Stripe 的在 `stripe.test.ts`）。
 - 运营参数：提交校验（未知字段、越界、类型、长度）与公告规范化、存值合并时丢弃非法值、KV 缓存未命中读 D1 并回写、坏 JSON 行忽略；每日上限按 UTC 自然日计数、超出时整个 batch 回滚；邀请奖励暂停期间付款的首单记为 `paused`，恢复后第二单不补发（`settings.test.ts`、`referrals.test.ts`）。
-- 测试连接：Dodo、Stripe 逐个套餐核对商品与价格（低于 site.ts 为失败、高于或币种不同为提示）、Key 无效与商品不存在；fal 和 yir 的余额与权限分支；R2、KV 不留探测数据；说明文字里的密钥值被替换（`probes.test.ts`）。Dodo、Waffo 的探测另用 test 凭据实测过一次。
+- 测试连接：Dodo、Stripe 逐个套餐核对商品与价格（低于 site.ts 为失败、高于或币种不同为提示）、Key 无效与商品不存在；PayPal 只测 OAuth，不要求商品目录；fal 和 yir 的余额与权限分支；R2、KV 不留探测数据；说明文字里的密钥值被替换（`probes.test.ts`）。Dodo、Waffo 的探测另用 test 凭据实测过一次。
 - 第三方校验：Turnstile 的启用与失败分支，OpenAI 审核接口异常时拒绝（fail closed）（`compliance.test.ts`）。
 - 发信重试：临时错误退避、永久错误不重试，邮件头注入（`email.test.ts`）。
 - 生产开关：生产和预发拒绝 mock（`providers.test.ts`）、弱 `SESSION_SECRET`（`security.test.ts`）、上线配置与 doctor（`config-health.test.ts`）、预发配置与 robots（`staging.test.ts`）。
