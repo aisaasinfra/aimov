@@ -21,17 +21,20 @@ export function Nav() {
   ]
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-black/10 bg-[#203d32] text-[#f6f3eb]">
       <nav className="container-page flex h-16 items-center justify-between gap-4">
         <Logo />
-        <div className="hidden items-center gap-10 md:flex">
+        <div className="hidden items-center gap-7 md:flex">
           {links.map((link) => (
-            <a key={link.href} href={link.href} className="eyebrow text-fg/80 hover:text-fg">
+            <a key={link.href} href={link.href} className="text-sm text-[#f6f3eb]/80 transition hover:text-[#f6f3eb]">
               {link.label}
             </a>
           ))}
         </div>
         <div className="flex items-center gap-1.5">
+          <a href={`${lp('/')}#create`} className="btn-berry hidden px-3 py-1.5 text-sm md:inline-flex">
+            {c.nav.start}
+          </a>
           <LanguageSwitcher />
           <ThemeToggle />
           <div className="hidden md:block">
@@ -39,7 +42,7 @@ export function Nav() {
           </div>
           <button
             type="button"
-            className="grid size-9 place-items-center rounded-full hover:bg-bg-soft md:hidden"
+            className="grid size-9 place-items-center rounded-full hover:bg-white/10 md:hidden"
             aria-label={c.nav.menu}
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
@@ -49,13 +52,16 @@ export function Nav() {
         </div>
       </nav>
       {open ? (
-        <div className="border-t border-line bg-bg md:hidden">
+        <div className="border-t border-white/10 bg-[#203d32] md:hidden">
           <div className="container-page flex flex-col gap-4 py-5">
             {links.map((link) => (
-              <a key={link.href} href={link.href} className="eyebrow" onClick={() => setOpen(false)}>
+              <a key={link.href} href={link.href} className="text-sm" onClick={() => setOpen(false)}>
                 {link.label}
               </a>
             ))}
+            <a href={`${lp('/')}#create`} className="btn-berry w-fit px-4 py-2" onClick={() => setOpen(false)}>
+              {c.nav.start}
+            </a>
             <AccountButton />
           </div>
         </div>
@@ -84,7 +90,7 @@ function AccountButton() {
   if (loading) return <span className="inline-block h-9 w-20" aria-hidden />
   if (!user) {
     return (
-      <LocalLink to="/sign-in" className="eyebrow px-2 py-2 hover:text-accent" data-testid="nav-sign-in">
+      <LocalLink to="/sign-in" className="rounded-full border border-[#f6f3eb]/40 px-3 py-1.5 text-sm font-medium text-[#f6f3eb] hover:bg-white/10" data-testid="nav-sign-in">
         {c.nav.signIn}
       </LocalLink>
     )
@@ -95,7 +101,7 @@ function AccountButton() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full border border-line bg-card py-1 pr-3 pl-1 text-sm"
+        className="flex items-center gap-2 rounded-full border border-[#e0d5c3] bg-[#fffaf2] py-1 pr-3 pl-1 text-sm text-[#203d32]"
         aria-expanded={open}
         data-testid="account-menu"
       >
@@ -110,7 +116,7 @@ function AccountButton() {
         <ChevronDown className="size-4 text-muted" />
       </button>
       {open ? (
-        <div className="card absolute right-0 z-50 mt-2 w-56 overflow-hidden p-1.5 shadow-lg">
+        <div className="card absolute right-0 z-50 mt-2 w-56 overflow-hidden p-1.5 text-[#203d32] shadow-lg">
           <p className="truncate px-3 py-2 text-xs text-muted">{user.email}</p>
           {[
             { to: '/dashboard', label: c.nav.dashboard },
@@ -156,7 +162,7 @@ export function ThemeToggle() {
     setTheme(next)
   }
   return (
-    <button type="button" onClick={toggle} aria-label={c.nav.toggleTheme} className="grid size-9 place-items-center rounded-full hover:bg-bg-soft">
+    <button type="button" onClick={toggle} aria-label={c.nav.toggleTheme} className="grid size-9 place-items-center rounded-full text-[#f6f3eb] hover:bg-white/10">
       {theme === 'dark' ? <Moon className="size-4.5" /> : <Sun className="size-4.5" />}
     </button>
   )
@@ -212,12 +218,12 @@ export function LanguageSwitcher() {
         aria-label={c.nav.language}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="grid size-9 place-items-center rounded-full hover:bg-bg-soft"
+        className="grid size-9 place-items-center rounded-full text-[#f6f3eb] hover:bg-white/10"
       >
         <Languages className="size-4.5" />
       </button>
       {open ? (
-        <ul className="card absolute right-0 z-50 mt-2 w-40 p-1.5 shadow-lg">
+        <ul className="card absolute right-0 z-50 mt-2 w-40 p-1.5 text-[#203d32] shadow-lg">
           {links.map((link) => (
             <li key={link.locale}>
               <a
@@ -253,7 +259,7 @@ export function LanguageLinks() {
           lang={link.tag}
           aria-current={link.current ? 'page' : undefined}
           onClick={withHash}
-          className={link.current ? 'font-semibold text-white' : 'text-[#f2ede4]/75 hover:text-white'}
+          className={link.current ? 'font-semibold text-white' : 'text-[#f6f3eb]/75 hover:text-white'}
         >
           {link.name}
         </a>

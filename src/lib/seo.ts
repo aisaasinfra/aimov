@@ -29,10 +29,10 @@ function priceOf(cents: number) {
   return (cents / 100).toFixed(2)
 }
 
-// 首页：组织 + 网站 + 应用（全部积分包汇总成 AggregateOffer）+ 示例视频
-export function homeJsonLd(locale: Locale, description: string, video: { name: string; description: string }) {
+// 首页：组织 + 网站 + 应用（全部积分包汇总成 AggregateOffer）。
+// 没有真实的节日成片 MP4，不把静帧或 neon demo 写成 VideoObject。
+export function homeJsonLd(locale: Locale, description: string) {
   const prices = site.packages.map((p) => p.priceCents)
-  const sample = site.examples.aiVersions[0]
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -55,19 +55,6 @@ export function homeJsonLd(locale: Locale, description: string, video: { name: s
           offerCount: site.packages.length,
         },
       },
-      ...(sample
-        ? [
-            {
-              '@type': 'VideoObject',
-              name: video.name,
-              description: video.description,
-              thumbnailUrl: absoluteUrl(sample.poster),
-              contentUrl: absoluteUrl(sample.video),
-              uploadDate: `${site.seo.publishedAt}T00:00:00+00:00`,
-              inLanguage: htmlLang(locale),
-            },
-          ]
-        : []),
     ],
   }
 }

@@ -1,6 +1,6 @@
 import { useRouterState } from '@tanstack/react-router'
 import { Plus, Upload } from 'lucide-react'
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { findVideoTemplate, site, type VideoTemplate } from '#/config/site'
 import { api, errorCode, isActiveGeneration, type Generation } from '#/lib/api'
 import { track } from '#/lib/attribution'
@@ -8,6 +8,7 @@ import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
 import { signInHref, useSession } from '#/lib/session'
 
 type Photo = { file: File; previewUrl: string; uploadId: string | null }
+type TemplateSource = 'coverflow' | 'wall'
 
 type PlayApi = {
   inputRef: RefObject<HTMLInputElement | null>
@@ -28,7 +29,7 @@ type PlayApi = {
   busy: boolean
   selectFile: (file: File | undefined) => Promise<void>
   selectDuration: (id: string) => void
-  selectTemplate: (id: string, source: 'strip' | 'wall') => void
+  selectTemplate: (id: string, source: TemplateSource) => void
   generate: () => Promise<void>
   requestCreate: () => void
   reset: () => void
@@ -39,11 +40,16 @@ type PlayApi = {
 
 const PlayContext = createContext<PlayApi | null>(null)
 const POLL_MS = 3000
+const MOBILE_QUERY = '(max-width: 1023px)'
 
 export function usePlay() {
   const value = useContext(PlayContext)
   if (!value) throw new Error('usePlay must be used inside PlayProvider')
   return value
+}
+
+export function templateCopy(templates: Record<string, { name: string; blurb: string }>, id: string) {
+  return templates[id] ?? { name: id, blurb: '' }
 }
 
 export function PlayProvider({ children }: { children: ReactNode }) {
@@ -58,7 +64,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [templateId, setTemplateId] = useState<string>(first.id)
-  const [durationId, setDurationId] = useState<string>(first.durationId)
+  const [durationId, setDurationId] = useState<string>(site.durations[0]!.id)
   const [consent, setConsent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -94,25 +100,27 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   }, [generation, refresh])
 
   useEffect(() => {
-    const node = document.getElementById('create')
-    if (!node || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver(
-      ([entry]) => setCreateVisible(entry?.isIntersecting ?? true),
-      { threshold: 0.15 },
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
+    document.body.dataset.playPage = 'home'
+    return () => {
+      delete document.body.dataset.playPage
+    }
   }, [])
 
   useEffect(() => {
-    const pad = createVisible ? '' : '5.5rem'
-    document.body.style.paddingBottom = pad
-    document.documentElement.style.scrollPaddingBottom = pad
-    return () => {
-      document.body.style.paddingBottom = ''
-      document.documentElement.style.scrollPaddingBottom = ''
+    const node = document.getElementById('create')
+    if (!node || typeof IntersectionObserver === 'undefined') return
+    let observer: IntersectionObserver
+    try {
+      observer = new IntersectionObserver(
+        ([entry]) => setCreateVisible(entry?.isIntersecting ?? true),
+        { root: null, rootMargin: '-64px 0px 0px 0px', threshold: 0 },
+      )
+    } catch {
+      return
     }
-  }, [createVisible])
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   async function upload(file: File) {
     setUploading(true)
@@ -143,19 +151,17 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  function selectTemplate(id: string, source: 'strip' | 'wall') {
+  function selectTemplate(id: string, source: TemplateSource) {
     const next = findVideoTemplate(id)
     if (!next || busy) return
     setTemplateId(next.id)
-    setDurationId(next.durationId)
     if (source === 'wall') setWallPicked(true)
   }
 
   function selectDuration(id: string) {
     if (busy) return
+    if (!site.durations.some((item) => item.id === id)) return
     setDurationId(id)
-    const match = site.videoTemplates.find((item) => item.durationId === id)
-    if (match) setTemplateId(match.id)
   }
 
   async function generate() {
@@ -180,7 +186,13 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   }
 
   function openFile() {
+    const top = window.scrollY
     inputRef.current?.click()
+    const restore = () => {
+      if (window.scrollY !== top) window.scrollTo(0, top)
+    }
+    restore()
+    window.requestAnimationFrame(restore)
   }
 
   function requestCreate() {
@@ -255,45 +267,113 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   )
 }
 
-function templateCopy(templates: Record<string, { name: string; blurb: string }>, id: string) {
-  return templates[id] ?? { name: id, blurb: '' }
+function wrapOffset(index: number, selected: number, count: number) {
+  let offset = index - selected
+  if (offset > count / 2) offset -= count
+  if (offset < -count / 2) offset += count
+  return offset
 }
 
-export function TemplateStrip() {
+export function SceneCoverflow() {
   const play = usePlay()
   const c = useContent().play
+  const templates = site.videoTemplates
+  const selected = Math.max(0, templates.findIndex((item) => item.id === play.templateId))
+  const copy = templateCopy(c.templates, play.template.id)
+  const drag = useRef<{ x: number; pointerId: number } | null>(null)
+  const dragged = useRef(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  function step(delta: number) {
+    const next = templates[(selected + delta + templates.length) % templates.length]
+    if (!next) return
+    play.selectTemplate(next.id, 'coverflow')
+    rootRef.current?.querySelector<HTMLButtonElement>(`[data-scene-id="${next.id}"]`)?.focus({ preventScroll: true })
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+    event.preventDefault()
+    step(event.key === 'ArrowRight' ? 1 : -1)
+  }
+
+  const cards = templates
+    .map((item, index) => ({ item, offset: wrapOffset(index, selected, templates.length) }))
+    .filter((card) => Math.abs(card.offset) <= 1)
+    .sort((a, b) => Math.abs(b.offset) - Math.abs(a.offset))
+
   return (
-    <div className="space-y-2" data-testid="template-strip">
-      <p className="text-xs font-medium tracking-[0.18em] text-accent-text uppercase">{c.stripLabel}</p>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 snap-x">
-        {site.videoTemplates.map((item) => {
-          const active = item.id === play.templateId
-          const copy = templateCopy(c.templates, item.id)
-          const seconds = site.durations.find((duration) => duration.id === item.durationId)?.seconds ?? 0
-          return (
-            <article
-              key={item.id}
-              data-testid={`template-${item.id}`}
-              data-selected={active ? 'true' : 'false'}
-              className={`w-36 shrink-0 snap-start overflow-hidden rounded-2xl border bg-card ${active ? 'border-accent ring-2 ring-accent' : 'border-line'}`}
-            >
-              <video src={item.preview} poster={item.poster} muted playsInline loop className="aspect-[3/4] w-full object-cover" />
-              <div className="space-y-2 p-2.5">
-                <p className="text-sm font-semibold leading-tight">{copy.name}</p>
-                <p className="text-xs text-muted">{c.seconds(seconds)}</p>
-                <button
-                  type="button"
-                  className={active ? 'btn-primary w-full px-3 py-1.5 text-xs' : 'btn-ghost w-full px-3 py-1.5 text-xs'}
-                  aria-pressed={active}
-                  data-testid={`template-use-${item.id}`}
-                  onClick={() => play.selectTemplate(item.id, 'strip')}
-                >
-                  {active ? c.selected : c.use}
-                </button>
-              </div>
-            </article>
-          )
-        })}
+    <div className="christmas-hero-flow" data-testid="template-coverflow">
+      <div
+        ref={rootRef}
+        className="merry-coverflow"
+        data-scene-stage=""
+        data-scene={play.template.id}
+        role="region"
+        aria-label={c.stripLabel}
+        onKeyDown={onKeyDown}
+        onPointerDown={(event) => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return
+          drag.current = { x: event.clientX, pointerId: event.pointerId }
+        }}
+        onPointerUp={(event) => {
+          const start = drag.current
+          drag.current = null
+          if (!start || start.pointerId !== event.pointerId) return
+          const dx = event.clientX - start.x
+          if (Math.abs(dx) < 42) return
+          dragged.current = true
+          step(dx < 0 ? 1 : -1)
+        }}
+        onPointerCancel={() => {
+          drag.current = null
+        }}
+      >
+        <div className="merry-coverflow-stage">
+          {cards.map(({ item, offset }) => {
+            const active = offset === 0
+            const itemCopy = templateCopy(c.templates, item.id)
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className="merry-coverflow-card"
+                data-offset={offset}
+                data-scene-id={item.id}
+                data-testid={`template-use-${item.id}`}
+                data-selected={active ? 'true' : 'false'}
+                aria-pressed={active}
+                aria-label={itemCopy.name}
+                tabIndex={Math.abs(offset) > 1 ? -1 : 0}
+                onClick={() => {
+                  if (dragged.current) {
+                    dragged.current = false
+                    return
+                  }
+                  play.selectTemplate(item.id, 'coverflow')
+                }}
+              >
+                <span className="merry-coverflow-frame">
+                  <img src={item.poster} alt={active ? itemCopy.name : ''} draggable={false} />
+                  {active ? (
+                    <span className="merry-coverflow-hint" aria-hidden="true">
+                      {c.use}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="merry-coverflow-caption">
+        <div className="merry-coverflow-caption-inner">
+          <div className="min-w-0">
+            <p className="font-display text-xl leading-none md:text-2xl">{copy.name}</p>
+            <p className="mt-1 text-sm text-muted">{c.frameNote}</p>
+          </div>
+          <p className="shrink-0 text-xs text-muted">{c.presetBadge}</p>
+        </div>
       </div>
     </div>
   )
@@ -303,66 +383,35 @@ export function TemplateWall() {
   const play = usePlay()
   const c = useContent().play
   return (
-    <section id="examples" className="scroll-mt-20 border-t border-line bg-bg-soft/60 py-20" data-testid="template-wall">
+    <section id="examples" className="scroll-mt-20 border-t border-line bg-bg-soft/50 py-16" data-testid="template-wall">
       <div className="container-page">
-        <p className="eyebrow text-accent-text">{c.eyebrow}</p>
-        <h2 className="mt-3 max-w-2xl font-display text-4xl leading-tight sm:text-5xl">{c.wallTitle}</h2>
+        <h2 className="max-w-2xl font-display text-4xl leading-tight sm:text-5xl">{c.wallTitle}</h2>
         <p className="mt-4 max-w-2xl text-lg leading-8 text-muted">{c.wallBody}</p>
-        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <ul className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {site.videoTemplates.map((item) => {
             const active = item.id === play.templateId
             const copy = templateCopy(c.templates, item.id)
-            const seconds = site.durations.find((duration) => duration.id === item.durationId)?.seconds ?? 0
             return (
-              <article key={item.id} className={`card overflow-hidden ${active ? 'ring-2 ring-accent' : ''}`} data-testid={`template-wall-${item.id}`}>
-                <video src={item.preview} poster={item.poster} muted playsInline loop preload="metadata" className="aspect-[3/4] w-full object-cover" />
-                <div className="space-y-2 p-3">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="font-semibold">{copy.name}</h3>
-                    <span className="text-xs text-muted">{c.seconds(seconds)}</span>
-                  </div>
-                  <p className="text-sm leading-6 text-muted">{copy.blurb}</p>
-                  <button
-                    type="button"
-                    className={active ? 'btn-primary w-full py-2 text-sm' : 'btn-ghost w-full py-2 text-sm'}
-                    aria-pressed={active}
-                    data-testid={`template-wall-use-${item.id}`}
-                    onClick={() => play.selectTemplate(item.id, 'wall')}
-                  >
-                    {active ? c.selected : c.use}
-                  </button>
-                </div>
-              </article>
+              <li key={item.id} data-scene-card={item.id}>
+                <button
+                  type="button"
+                  className={`block w-full overflow-hidden rounded-2xl border bg-card text-left transition hover:bg-bg-soft ${active ? 'border-ink' : 'border-line'}`}
+                  aria-pressed={active}
+                  data-testid={`template-wall-use-${item.id}`}
+                  onClick={() => play.selectTemplate(item.id, 'wall')}
+                >
+                  <img src={item.thumb} alt="" className="aspect-[3/4] w-full object-cover object-top" />
+                  <span className="flex items-baseline justify-between gap-2 px-3 py-2.5">
+                    <span className="font-display text-base leading-tight">{copy.name}</span>
+                    <span className="shrink-0 text-sm text-accent-text">{active ? c.selected : c.use}</span>
+                  </span>
+                </button>
+              </li>
             )
           })}
-        </div>
+        </ul>
       </div>
     </section>
-  )
-}
-
-export function TemplatePreview() {
-  const play = usePlay()
-  const c = useContent()
-  const copy = templateCopy(c.play.templates, play.template.id)
-  return (
-    <figure className="mx-auto w-full max-w-sm" data-testid="template-preview">
-      <div className="relative overflow-hidden rounded-3xl bg-ink shadow-lg ring-1 ring-black/10">
-        <video
-          key={play.template.preview}
-          src={play.template.preview}
-          poster={play.template.poster}
-          muted
-          playsInline
-          loop
-          autoPlay
-          className="aspect-[9/16] max-h-[640px] w-full object-cover"
-        />
-      </div>
-      <figcaption className="mt-3 text-center text-sm text-muted">
-        {c.play.previewLabel}: {copy.name} · {c.play.seconds(play.duration.seconds)}
-      </figcaption>
-    </figure>
   )
 }
 
@@ -370,39 +419,90 @@ function PlayChrome() {
   const play = usePlay()
   const c = useContent().play
   const copy = templateCopy(c.templates, play.template.id)
+  const [isMobile, setIsMobile] = useState(false)
+  const [fabHidden, setFabHidden] = useState(false)
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia(MOBILE_QUERY)
+    const update = () => setIsMobile(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  const stickyVisible = !play.createVisible && (!isMobile || play.wallPicked)
+  const fabEligible = isMobile && !play.createVisible && !stickyVisible
+
+  useEffect(() => {
+    if (!fabEligible) return
+    setFabHidden(false)
+    let lastY = window.scrollY || document.documentElement.scrollTop || 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onScroll = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        const y = window.scrollY || document.documentElement.scrollTop || 0
+        const delta = y - lastY
+        if (delta > 8) setFabHidden(true)
+        else if (delta < -8) setFabHidden(false)
+        lastY = y
+      }, 150)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (timer) clearTimeout(timer)
+    }
+  }, [fabEligible])
+
+  useEffect(() => {
+    const mode = stickyVisible ? 'sticky' : fabEligible ? 'fab' : ''
+    if (mode) document.body.dataset.playChrome = mode
+    else delete document.body.dataset.playChrome
+    const pad = stickyVisible ? '5.75rem' : ''
+    document.body.style.paddingBottom = pad
+    document.documentElement.style.scrollPaddingBottom = pad
+    return () => {
+      delete document.body.dataset.playChrome
+      document.body.style.paddingBottom = ''
+      document.documentElement.style.scrollPaddingBottom = ''
+    }
+  }, [stickyVisible, fabEligible])
+
   if (play.createVisible) return null
-  const showSticky = play.wallPicked
+
   return (
     <>
-      <div
-        data-testid="sticky-create"
-        className={`${showSticky ? 'flex' : 'hidden lg:flex'} fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/95 px-4 py-3 backdrop-blur`}
-      >
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-3">
-          <img src={play.photo?.previewUrl ?? play.template.poster} alt="" className="size-12 rounded-lg object-cover" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{copy.name}</p>
-            <p className="text-xs text-muted">{c.seconds(play.duration.seconds)}</p>
+      {stickyVisible ? (
+        <div role="region" aria-label={c.stickyCreate} data-testid="sticky-create" data-scene={play.template.id} className="play-sticky-bar">
+          <div className="container-page play-sticky-bar-inner">
+            <span className="play-sticky-thumb">
+              <img src={play.template.thumb} alt="" />
+            </span>
+            <p className="play-sticky-title">{copy.name}</p>
+            <div className="play-sticky-actions">
+              <button type="button" className="btn-ghost px-3 py-2" onClick={play.openFile}>
+                <Upload className="size-4" /> {play.photo ? c.stickyUploaded : c.stickyUpload}
+              </button>
+              <button type="button" className="btn-berry px-4 py-2" onClick={play.requestCreate} data-testid="sticky-create-button">
+                {c.stickyCreate}
+              </button>
+            </div>
           </div>
-          <button type="button" className="btn-ghost px-4 py-2" onClick={play.openFile}>
-            <Upload className="size-4" /> {c.stickyUpload}
-          </button>
-          <button type="button" className="btn-primary px-4 py-2" onClick={play.requestCreate} data-testid="sticky-create-button">
-            {c.stickyCreate}
-          </button>
         </div>
-      </div>
-      {showSticky ? null : (
+      ) : null}
+      {fabEligible ? (
         <button
           type="button"
           data-testid="play-fab"
           aria-label={c.fabLabel}
-          className="fixed right-5 bottom-5 z-40 grid size-14 place-items-center rounded-full bg-ink text-2xl text-ink-fg shadow-lg lg:hidden"
+          className={fabHidden ? 'play-upload-fab is-hidden' : 'play-upload-fab'}
           onClick={play.openFile}
         >
           <Plus className="size-7" />
         </button>
-      )}
+      ) : null}
     </>
   )
 }

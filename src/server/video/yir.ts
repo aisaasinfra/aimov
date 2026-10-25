@@ -48,6 +48,14 @@ interface SceneMeta {
   durationSeconds: number
   sourceVideoUrl: string
   webhookUrl: string
+  scenePrompt?: string
+}
+
+// 动作参考的基础 prompt 保持不变。选了圣诞世界时，把该世界的描述接在后面。
+function motionPrompt(scenePrompt: unknown) {
+  const world = typeof scenePrompt === 'string' ? scenePrompt.trim() : ''
+  const motion = site.video.yir.prompt
+  return world ? `${motion} Christmas world: ${world}` : motion
 }
 
 type Reference = { role: 'reference_image'; url: string } | { role: 'reference_image'; file_id: string }
@@ -85,11 +93,18 @@ export function createYirProvider(env: Env): VideoProvider {
     return job.id
   }
 
-  function submitVideo(generationId: string, image: Reference, sourceVideoUrl: string, durationSeconds: number, webhookUrl: string) {
-    const { model, prompt, resolution, routingOnly } = site.video.yir
+  function submitVideo(
+    generationId: string,
+    image: Reference,
+    sourceVideoUrl: string,
+    durationSeconds: number,
+    webhookUrl: string,
+    scenePrompt: unknown,
+  ) {
+    const { model, resolution, routingOnly } = site.video.yir
     const body = {
       model,
-      input: { type: 'reference', prompt, references: [image, { role: 'reference_video', url: sourceVideoUrl }] },
+      input: { type: 'reference', prompt: motionPrompt(scenePrompt), references: [image, { role: 'reference_video', url: sourceVideoUrl }] },
       parameters: { duration: durationSeconds, resolution, aspect_ratio: 'auto', generate_audio: false, n: 1 },
     }
     return submitJob('videos', withDelivery(body, webhookUrl, routingOnly), generationId)
@@ -151,7 +166,7 @@ export function createYirProvider(env: Env): VideoProvider {
     const fileId = await uploadScene(meta.generationId, image.url, image.media_type)
     if (!fileId) return { state: 'pending' }
     const reference = { role: 'reference_image', file_id: fileId } as const
-    const videoId = await submitVideo(meta.generationId, reference, meta.sourceVideoUrl, meta.durationSeconds, meta.webhookUrl)
+    const videoId = await submitVideo(meta.generationId, reference, meta.sourceVideoUrl, meta.durationSeconds, meta.webhookUrl, meta.scenePrompt)
     return { state: 'pending', next: { requestId: videoId, meta: { stage: 'video', sceneCostCents: settledCents(job) } } }
   }
 
@@ -161,7 +176,14 @@ export function createYirProvider(env: Env): VideoProvider {
       const scene = site.video.yir.scene
       if (!scene) {
         const reference = { role: 'reference_image', url: input.imageUrl } as const
-        const requestId = await submitVideo(input.generationId, reference, input.sourceVideoUrl, input.durationSeconds, input.webhookUrl)
+        const requestId = await submitVideo(
+          input.generationId,
+          reference,
+          input.sourceVideoUrl,
+          input.durationSeconds,
+          input.webhookUrl,
+          input.meta.scenePrompt,
+        )
         return { requestId, meta: {} }
       }
       // Image 1 是源视频首帧，Image 2 是用户照片，和 scene.prompt 的写法对应
@@ -178,12 +200,14 @@ export function createYirProvider(env: Env): VideoProvider {
         parameters: { resolution: scene.resolution, aspect_ratio: scene.aspectRatio, n: 1 },
       }
       const requestId = await submitJob('images', withDelivery(body, input.webhookUrl, scene.routingOnly), `${input.generationId}:scene`)
+      const scenePrompt = typeof input.meta.scenePrompt === 'string' ? input.meta.scenePrompt : undefined
       const meta: SceneMeta = {
         stage: 'scene',
         generationId: input.generationId,
         durationSeconds: input.durationSeconds,
         sourceVideoUrl: input.sourceVideoUrl,
         webhookUrl: input.webhookUrl,
+        ...(scenePrompt ? { scenePrompt } : {}),
       }
       return { requestId, meta: { ...meta } }
     },

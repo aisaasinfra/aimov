@@ -50,7 +50,7 @@ export const Route = createRootRoute({
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: site.brandName },
-      { name: 'theme-color', content: '#f7f4ee' },
+      { name: 'theme-color', content: '#203d32' },
       { property: 'og:site_name', content: site.brandName },
       { property: 'og:type', content: 'website' },
       { property: 'og:image', content: `https://${site.domain}${site.ogImage}` },
