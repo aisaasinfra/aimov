@@ -33,6 +33,8 @@ https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
 
 ## 本地开发
 
+逐步说明见 [docs/local-deploy.zh-CN.md](docs/local-deploy.zh-CN.md)。
+
 ```bash
 npm install
 cp .dev.vars.example .dev.vars       # 至少填 SESSION_SECRET
