@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
-import { findDuration, findPackage, findPlan, findVideoTemplate, isLocale, localePath, sellingPlans, site } from '#/config/site'
+import { findDuration, findPackage, findPlan, findVideoTemplate, isLocale, localePath, sellingPlans, site, templatePrompt } from '#/config/site'
 import { safeRedirectPath } from '#/lib/redirect'
 import { exportFileName, exportUserData } from './account-export'
 import { adminRoutes } from './admin'
@@ -298,8 +298,8 @@ app.post('/api/generations', async (c) => {
   const requestedTemplate = typeof body.templateId === 'string' ? body.templateId.trim() : ''
   const template = requestedTemplate ? findVideoTemplate(requestedTemplate) : undefined
   if (requestedTemplate && !template) throw new ApiError(400, 'invalid_template')
-  if (template && body.durationId && template.durationId !== body.durationId) throw new ApiError(400, 'invalid_duration')
-  const duration = findDuration(template?.durationId ?? body.durationId ?? '')
+  // 世界和时长分开选：任意 Merry Us 世界都可以出 6/12/18 秒。
+  const duration = findDuration(body.durationId ?? '')
   if (!duration) throw new ApiError(400, 'invalid_duration')
   const db = c.env.DB
   const upload = await db
@@ -318,7 +318,11 @@ app.post('/api/generations', async (c) => {
 
   const providerId = activeVideoProviderId(c.env)
   const mockOutcome = providerId === 'mock' && (body.mockOutcome === 'fail' || body.mockOutcome === 'hang') ? body.mockOutcome : null
-  const meta = mockOutcome ? JSON.stringify({ mockOutcome }) : null
+  const scenePrompt = template ? templatePrompt(template, body.locale) : ''
+  const metaObject: Record<string, string> = {}
+  if (mockOutcome) metaObject.mockOutcome = mockOutcome
+  if (scenePrompt) metaObject.scenePrompt = scenePrompt
+  const meta = Object.keys(metaObject).length ? JSON.stringify(metaObject) : null
   const id = createId('gen')
   const now = nowIso()
   try {

@@ -5,19 +5,19 @@
 
 /* 颜色全部走 CSS 变量：换站时改这里的几行即可换肤 */
 :root {
-  --bg: #f6f1e7;
-  --bg-soft: #efe6d6;
-  --card: #fffaf3;
-  --fg: #1e3a2f;
-  --muted: #5c6b62;
-  --line: #e3d7c4;
-  --ink: #1e3a2f;
-  --ink-fg: #f6f1e7;
-  --accent: #9b2c3a;
+  --bg: #f6f3eb;
+  --bg-soft: #efe6d4;
+  --card: #fffaf2;
+  --fg: #203d32;
+  --muted: #3e5649;
+  --line: #e0d5c3;
+  --ink: #203d32;
+  --ink-fg: #f6f3eb;
+  --accent: #8b2d32;
   /* 小号强调文字用：对 --bg 的对比度需 ≥ 4.5:1（WCAG AA），--accent 只适合图标、大字和背景 */
-  --accent-text: #7a1f2c;
+  --accent-text: #6e2228;
   --accent-2: #2f6b4f;
-  --glow: rgba(155, 44, 58, 0.14);
+  --glow: rgba(139, 45, 50, 0.12);
   color-scheme: light;
 }
 
@@ -30,10 +30,10 @@
   --line: #2d453b;
   --ink: #f3eadc;
   --ink-fg: #12201a;
-  --accent: #e06a78;
-  --accent-text: #f3b4bb;
-  --accent-2: #7dcea0;
-  --glow: rgba(224, 106, 120, 0.18);
+  --accent: #e07a84;
+  --accent-text: #f3c3c8;
+  --accent-2: #8fbfa4;
+  --glow: rgba(224, 122, 132, 0.16);
   color-scheme: dark;
 }
 
@@ -84,17 +84,25 @@
     @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
   }
   .eyebrow {
-    @apply text-xs font-medium tracking-[0.28em] uppercase;
+    @apply text-xs font-medium tracking-wide;
   }
   /* Tailwind 4 的 @apply 不能引用自定义类，按钮基础样式用并列选择器共享；放在 components 层，页面上的 px-3 等工具类可覆盖 */
   .btn,
   .btn-primary,
   .btn-ghost,
-  .btn-danger {
+  .btn-danger,
+  .btn-berry {
     @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
     @apply bg-ink text-ink-fg hover:opacity-90;
+  }
+  .btn-berry {
+    background: #8b2d32;
+    color: #fff6ea;
+  }
+  .btn-berry:hover {
+    opacity: 0.92;
   }
   .btn-ghost {
     @apply border border-line bg-card text-fg hover:bg-bg-soft;
@@ -144,6 +152,381 @@
 
 .hero-glow {
   background: radial-gradient(60% 50% at 70% 30%, var(--glow), transparent 70%);
+}
+
+/* Merry Us play studio: cream page, pine type, berry Create, coverflow of 3D worlds. */
+.play-hero {
+  overflow-x: clip;
+  background-color: var(--bg);
+  background-image: radial-gradient(circle at 0% 0%, #fff2d3 0, transparent 28rem);
+}
+
+[data-theme='dark'] .play-hero {
+  background-image: radial-gradient(circle at 0% 0%, rgba(255, 242, 211, 0.08) 0, transparent 28rem);
+}
+
+.christmas-hero {
+  display: grid;
+  gap: 0.85rem;
+  align-items: start;
+  padding-top: 1rem;
+  padding-bottom: 1.5rem;
+}
+
+.christmas-hero-more {
+  width: fit-content;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-underline-offset: 4px;
+}
+
+.christmas-hero-more:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.play-studio {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--card);
+}
+
+.play-studio-photo {
+  padding: 0.9rem 1rem 0.35rem;
+}
+
+.play-studio-actions {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem 1rem;
+}
+
+.merry-coverflow-stage {
+  position: relative;
+  height: 15.5rem;
+  perspective: 900px;
+  touch-action: pan-y;
+}
+
+.merry-coverflow-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(46vw, 9.5rem);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 1.35rem;
+  transition: transform 480ms ease;
+}
+
+.merry-coverflow-card[data-offset='0'] {
+  z-index: 5;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.merry-coverflow-card[data-offset='-1'] {
+  z-index: 4;
+  transform: translate(calc(-50% - 78%), -50%) rotateY(34deg) scale(0.84);
+}
+
+.merry-coverflow-card[data-offset='1'] {
+  z-index: 4;
+  transform: translate(calc(-50% + 78%), -50%) rotateY(-34deg) scale(0.84);
+}
+
+.merry-coverflow-card[data-offset='-2'] {
+  z-index: 3;
+  transform: translate(calc(-50% - 138%), -50%) rotateY(44deg) scale(0.72);
+}
+
+.merry-coverflow-card[data-offset='2'] {
+  z-index: 3;
+  transform: translate(calc(-50% + 138%), -50%) rotateY(-44deg) scale(0.72);
+}
+
+.merry-coverflow-card:focus-visible {
+  outline: 2px solid #8b2d32;
+  outline-offset: 3px;
+}
+
+.merry-coverflow-frame {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 1.35rem;
+  background: #fffaf2;
+  box-shadow: 0 16px 34px rgba(32, 61, 50, 0.16);
+}
+
+.merry-coverflow-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.merry-coverflow-card[data-offset='0'] .merry-coverflow-frame {
+  box-shadow:
+    0 22px 46px rgba(32, 61, 50, 0.22),
+    0 0 0 2px #8b2d32;
+}
+
+.merry-coverflow-hint {
+  position: absolute;
+  bottom: 0.7rem;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 242, 211, 0.94);
+  color: #203d32;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.merry-coverflow-card[data-offset='0']:hover .merry-coverflow-hint,
+.merry-coverflow-card[data-offset='0']:focus-visible .merry-coverflow-hint {
+  opacity: 1;
+}
+
+.merry-coverflow-caption {
+  display: flex;
+  justify-content: center;
+  padding: 0.35rem 0.15rem 0;
+}
+
+.merry-coverflow-caption-inner {
+  display: flex;
+  width: min(100%, 34rem);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+  .christmas-hero {
+    grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+    column-gap: 1.75rem;
+    row-gap: 0.85rem;
+    padding-top: 1.75rem;
+    padding-bottom: 2.25rem;
+  }
+
+  .christmas-hero-copy {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .play-studio {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .christmas-hero-more {
+    grid-column: 1;
+    grid-row: 3;
+    margin-top: 0.15rem;
+  }
+
+  .christmas-hero-flow {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: center;
+  }
+
+  .merry-coverflow-stage {
+    height: 24.5rem;
+    perspective: 1200px;
+  }
+
+  .merry-coverflow-card {
+    width: 16.25rem;
+  }
+
+  .merry-coverflow-caption-inner {
+    width: 22rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .christmas-hero-copy {
+    order: 1;
+  }
+
+  .christmas-hero-flow {
+    order: 2;
+  }
+
+  .play-studio {
+    order: 3;
+  }
+
+  .christmas-hero-more {
+    order: 4;
+  }
+}
+
+.play-sticky-bar {
+  position: fixed;
+  z-index: 40;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-top: 1px solid #e0d5c3;
+  background: #fffaf2;
+  color: #203d32;
+  box-shadow: 0 -12px 32px rgba(32, 61, 50, 0.14);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.play-sticky-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.25rem;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.play-sticky-thumb {
+  position: relative;
+  width: 2.35rem;
+  height: 3.15rem;
+  flex: none;
+  overflow: hidden;
+  border-radius: 0.55rem;
+  background: #efe6d4;
+  box-shadow: 0 0 0 1px #e0d5c3;
+}
+
+.play-sticky-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.play-sticky-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.play-sticky-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.play-sticky-actions .btn-ghost {
+  background: #fffaf2;
+  color: #203d32;
+  border-color: #d9cdb8;
+}
+
+.play-upload-fab {
+  position: fixed;
+  z-index: 40;
+  right: 1.05rem;
+  bottom: calc(1.15rem + env(safe-area-inset-bottom));
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #8b2d32;
+  color: #fff6ea;
+  box-shadow: 0 12px 28px rgba(139, 45, 50, 0.35);
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.play-upload-fab.is-hidden {
+  transform: translateY(160%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body[data-play-chrome] [data-support-fab] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 1023px) {
+  body[data-play-page] [data-support-fab] {
+    display: none;
+  }
+
+  .christmas-hero {
+    gap: 0.55rem;
+    padding-top: 0.7rem;
+    padding-bottom: 1rem;
+  }
+
+  .christmas-hero-copy h1 {
+    font-size: 2.15rem;
+    line-height: 1.02;
+  }
+
+  .play-guest-note {
+    display: none;
+  }
+
+  .merry-coverflow-stage {
+    height: 10.5rem;
+  }
+
+  .merry-coverflow-card {
+    width: min(34vw, 7.35rem);
+  }
+
+  .merry-coverflow-caption {
+    padding-top: 0.1rem;
+  }
+
+  .play-studio-photo {
+    padding-top: 0.65rem;
+  }
+
+  .play-studio-actions {
+    gap: 0.55rem;
+    padding-bottom: 0.8rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .play-sticky-title {
+    font-size: 0.92rem;
+  }
+
+  .play-sticky-actions {
+    gap: 0.35rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .merry-coverflow-card,
+  .play-upload-fab,
+  .merry-coverflow-hint {
+    transition: none;
+  }
 }
 
 @keyframes spin-slow {

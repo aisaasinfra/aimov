@@ -1,10 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ArrowRight, Camera, Check, Clock, Coins, Film, Flame, ShieldCheck, Smartphone, X } from 'lucide-react'
+import { ArrowRight, Camera, Check, Clock, Coins, Film, ShieldCheck, Smartphone, X } from 'lucide-react'
 import { Faq, faqJsonLd } from '#/components/Faq'
 import { Generator } from '#/components/Generator'
-import { PlayProvider, TemplatePreview, TemplateStrip, TemplateWall } from '#/components/play'
+import { PlayProvider, SceneCoverflow, TemplateWall } from '#/components/play'
 import { Pricing } from '#/components/Pricing'
-import { VideoCard } from '#/components/VideoCard'
 import { LocalLink } from '#/components/ui'
 import { articlePath, formatPrice, site } from '#/config/site'
 import { getContent, localeFromParam, pageHead, useContent } from '#/lib/i18n'
@@ -18,7 +17,7 @@ export const Route = createFileRoute('/{-$locale}/')({
     return {
       ...head,
       scripts: [
-        jsonLdScript(homeJsonLd(locale, c.meta.homeDescription, { name: `${c.hero.aiVersion} – ${site.keyword}`, description: c.madeWith.body })),
+        jsonLdScript(homeJsonLd(locale, c.meta.homeDescription)),
         jsonLdScript(faqJsonLd(c.faq.items)),
       ],
     }
@@ -41,37 +40,20 @@ function HomePage() {
   const ex = site.examples
   return (
     <>
-      <section className="relative overflow-hidden">
-        <div className="hero-glow pointer-events-none absolute inset-0" aria-hidden />
-        <div className="container-page relative grid gap-10 py-10 lg:grid-cols-[minmax(0,430px)_1fr] lg:gap-16 lg:py-14">
-          <div className="space-y-5" id="create">
-            <h1 className="font-display text-5xl leading-[1.04] tracking-tight sm:text-6xl">{c.hero.title}</h1>
-            <p className="text-lg leading-8 text-muted">{c.hero.subtitle}</p>
-            <TemplateStrip />
-            <Generator />
+      <section id="create" className="play-hero" data-testid="play-hero">
+        <div className="christmas-hero container-page">
+          <div className="christmas-hero-copy">
+            <p className="w-fit rounded-full bg-[#fff2d3] px-3 py-1 text-xs font-medium text-[#203d32]">{c.hero.badge}</p>
+            <h1 className="mt-3 font-display text-4xl leading-[1.05] tracking-tight sm:text-5xl">
+              {c.hero.title} <em className="text-accent">{c.hero.accent}</em>
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted sm:text-base">{c.hero.subtitle}</p>
           </div>
-          <div className="flex flex-col justify-center gap-5">
-            <span className="chip w-fit">
-              <Flame className="size-4 text-accent" /> {c.hero.badge}
-            </span>
-            <TemplatePreview />
-            <div className="flex flex-wrap justify-center gap-2">
-              {c.hero.chips.map((chip) => (
-                <span key={chip} className="chip">
-                  {chip}
-                </span>
-              ))}
-            </div>
-            <p className="text-center text-xs text-muted">{c.hero.creditNote}</p>
-            <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm font-medium">
-              <LocalLink to={articlePath('trend')} className="inline-flex items-center gap-1.5 hover:text-accent">
-                {c.articles.trend.title} <ArrowRight className="size-4" />
-              </LocalLink>
-              <LocalLink to={articlePath('howTo')} className="inline-flex items-center gap-1.5 hover:text-accent">
-                {c.articles.howTo.title} <ArrowRight className="size-4" />
-              </LocalLink>
-            </div>
-          </div>
+          <Generator />
+          <SceneCoverflow />
+          <a href="#examples" className="christmas-hero-more">
+            {c.play.seeWorlds}
+          </a>
         </div>
       </section>
 
@@ -146,7 +128,7 @@ function HomePage() {
             ))}
           </ol>
           <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-3 text-sm font-semibold">
-            <a href="#create" className="btn-primary">
+            <a href="#create" className="btn-berry">
               {c.howTo.cta}
             </a>
             <LocalLink to={articlePath('howTo')} className="inline-flex items-center gap-1.5 hover:text-accent">
@@ -167,14 +149,14 @@ function HomePage() {
           </div>
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
             <figure>
-              <img src={ex.madeWith.photo} alt={c.alt.inputPhoto} loading="lazy" className="aspect-[3/4] w-full rounded-2xl object-cover ring-1 ring-line" />
+              <img src={ex.madeWith.photo} alt={c.madeWith.photoLabel} loading="lazy" className="aspect-[3/4] w-full rounded-2xl object-cover object-top ring-1 ring-line" />
               <figcaption className="mt-2 text-center text-xs text-muted">{c.madeWith.photoLabel}</figcaption>
             </figure>
             <ArrowRight className="size-6 text-muted" aria-hidden />
-            <div>
-              <VideoCard video={ex.madeWith.video} poster={ex.madeWith.poster} />
-              <p className="mt-2 text-center text-xs text-muted">{c.madeWith.resultLabel}</p>
-            </div>
+            <figure>
+              <img src={ex.madeWith.poster} alt={c.madeWith.resultLabel} loading="lazy" className="aspect-[3/4] w-full rounded-2xl object-cover object-top ring-1 ring-line" />
+              <figcaption className="mt-2 text-center text-xs text-muted">{c.madeWith.resultLabel}</figcaption>
+            </figure>
           </div>
         </div>
       </section>
@@ -228,10 +210,12 @@ function HomePage() {
               const flip = index % 2 === 1
               return (
                 <div key={idea.title} className="grid items-center gap-10 md:grid-cols-2">
-                  <div className={`grid grid-cols-[0.8fr_1fr] items-end gap-4 ${flip ? 'md:order-2' : ''}`}>
-                    <img src={media.photo} alt={c.alt.inputPhoto} loading="lazy" className="aspect-[3/4] w-full rounded-2xl object-cover ring-1 ring-line" />
-                    <VideoCard video={media.video} poster={media.poster} />
-                  </div>
+                  <img
+                    src={media}
+                    alt={idea.title}
+                    loading="lazy"
+                    className={`aspect-[3/4] w-full max-w-sm rounded-2xl object-cover object-top ring-1 ring-line ${flip ? 'md:order-2' : ''}`}
+                  />
                   <div className="space-y-4">
                     <span className="font-display text-5xl text-accent">0{index + 1}</span>
                     <h3 className="font-display text-3xl">{idea.title}</h3>
@@ -269,15 +253,11 @@ function HomePage() {
       {/* Final CTA */}
       <section className="pb-24">
         <div className="container-page">
-          <div className="relative overflow-hidden rounded-3xl bg-ink px-6 py-16 text-center text-ink-fg sm:px-12">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-40 [background:radial-gradient(50%_60%_at_20%_0%,var(--accent),transparent_70%),radial-gradient(40%_50%_at_90%_100%,var(--accent-2),transparent_70%)]"
-              aria-hidden
-            />
+          <div className="relative overflow-hidden rounded-3xl bg-[#203d32] px-6 py-16 text-center text-[#f6f3eb] sm:px-12">
             <div className="relative space-y-5">
               <h2 className="font-display text-4xl leading-tight sm:text-5xl">{c.finalCta.title}</h2>
-              <p className="mx-auto max-w-xl opacity-80">{c.finalCta.body}</p>
-              <a href="#create" className="btn mt-2 bg-ink-fg text-ink hover:opacity-90">
+              <p className="mx-auto max-w-xl text-[#f6f3eb]/80">{c.finalCta.body}</p>
+              <a href="#create" className="btn-berry mt-2">
                 {c.finalCta.cta} · {formatPrice(site.packages[0]!.priceCents, site.packages[0]!.currency)}+
               </a>
             </div>

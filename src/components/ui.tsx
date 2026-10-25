@@ -17,10 +17,7 @@ export function LocalLink({ to, children, ...rest }: Omit<ComponentProps<'a'>, '
 
 export function LogoMark({ className = 'size-9 text-sm' }: { className?: string }) {
   return (
-    <span
-      aria-hidden
-      className={`grid shrink-0 place-items-center rounded-xl bg-[linear-gradient(135deg,var(--accent-2),var(--ink)_46%,var(--accent))] font-bold tracking-tight text-white shadow-sm ${className}`}
-    >
+    <span aria-hidden className={`grid shrink-0 place-items-center rounded-xl bg-[#8b2d32] font-display font-semibold text-[#fff6ea] ${className}`}>
       {site.logoMark}
     </span>
   )
@@ -28,9 +25,9 @@ export function LogoMark({ className = 'size-9 text-sm' }: { className?: string 
 
 export function Logo() {
   return (
-    <LocalLink to="/" className="flex items-center gap-2.5">
+    <LocalLink to="/" className="flex items-center gap-2.5 text-[#f6f3eb]">
       <LogoMark />
-      <span className="font-mono text-lg font-bold tracking-[0.12em] uppercase">{site.brandName}</span>
+      <span className="font-display text-xl tracking-tight">{site.brandName}</span>
     </LocalLink>
   )
 }
