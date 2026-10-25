@@ -4,7 +4,7 @@ export function CaptionNameplate({ name }: { name: string }) {
     <div className="merry-caption-sleigh">
       <img className="merry-caption-ornament" src="/caption-sleigh.webp" width={2172} height={724} alt="" aria-hidden="true" />
       <div className="merry-caption-plate">
-        <p className="merry-coverflow-title">{name}</p>
+        <p className="merry-coverflow-title" title={name}>{name}</p>
       </div>
     </div>
   )
