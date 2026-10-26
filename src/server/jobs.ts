@@ -8,7 +8,7 @@ import { sweepExpiredMedia } from './retention'
 import { grantDueSubscriptions } from './subscriptions'
 import { nowIso } from './util'
 import { getVideoProvider } from './video'
-import { VideoProviderError } from './video/types'
+import { VideoProviderError, type VideoProviderId } from './video/types'
 
 const JOB_TIMEOUT_MINUTES = 45
 // 成片大小上限：带 Content-Length 时直接流式写入 R2，不占 Worker 内存；没带时只能边读边缓存，上限更低（Worker 内存 128 MB）
@@ -59,7 +59,7 @@ export async function storeOutputFromUrl(
   await env.MEDIA.put(key, bytes, { httpMetadata })
   return true
 }
-const POLL_DELAY_SECONDS: Record<string, number> = { mock: 2, fal: 20, yir: 20, nanoapi: 30 }
+const POLL_DELAY_SECONDS: Record<VideoProviderId, number> = { mock: 2, fal: 20, yir: 20, nanoapi: 30, opengen: 20 }
 
 export async function enqueueJob(env: Env, message: VideoJobMessage, delaySeconds = 0) {
   await env.VIDEO_QUEUE.send(message, delaySeconds > 0 ? { delaySeconds } : undefined)
@@ -122,11 +122,12 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
     return
   }
 
-  const provider = getVideoProvider(env, generation.provider)
   const baseMeta = parseMeta(generation.provider_meta)
 
-  // 签名在 try 里：生产环境 SESSION_SECRET 配错时会抛错，要和提交失败一样放回 queued，交给队列重试和死信退款
+  // 签名和渠道解析都在 try 里：mock / 未知渠道、或生产环境 SESSION_SECRET 配错时抛错，
+  // 要和提交失败一样放回 queued，交给队列重试和死信退款。渠道只读这一行的 provider。
   try {
+    const provider = getVideoProvider(env, generation.provider)
     const webhookUrl = new URL(`/api/webhooks/${provider.id}`, env.SITE_URL)
     webhookUrl.searchParams.set('gen', generation.id)
     webhookUrl.searchParams.set('token', await jobToken(env, generation.id))
@@ -162,6 +163,7 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
 
 async function pollGeneration(env: Env, generation: GenerationRow) {
   if (generation.status !== 'processing' || !generation.provider_request_id) return
+  // 轮询同样只读行上的 provider，切换渠道不影响已在处理的工单。
   const provider = getVideoProvider(env, generation.provider)
   let status
   try {

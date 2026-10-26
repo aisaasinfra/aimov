@@ -80,6 +80,11 @@ export const site = {
       // genjutsu-1.0：480p $0.117/s、720p $0.273/s、1080p $0.78/s。motion_control 计费秒数 = 源视频秒数四舍五入、至少 4 秒；replace_object 向上取整
       costCentsPerSecond: 11.7,
     },
+    // OpenGen（可选）：aimov 推送 submit / status。厂商 Key 在 OpenGen 主机，不在这里。
+    // 单价表未约定。OpenGen 回传 cost_cents 时记实际成本；否则按这里估算（默认 0），不向用户再记账。
+    opengen: {
+      costCentsPerSecond: 0,
+    },
   },
 
   durations: [

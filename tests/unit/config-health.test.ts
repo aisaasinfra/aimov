@@ -59,6 +59,32 @@ describe('checkConfig', () => {
     expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' } }))).toEqual(['error:NANOAPI_API_KEY'])
     expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' }, secrets: { NANOAPI_API_KEY: 'n' } }))).toEqual([])
     expect(keys(ready({ vars: { VIDEO_PROVIDER: 'mock' } }))).toEqual(['error:VIDEO_PROVIDER'])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'opengen' } }))).toEqual(['error:OPENGEN_API_KEY', 'error:OPENGEN_BASE_URL'])
+    expect(
+      keys(
+        ready({
+          vars: { VIDEO_PROVIDER: 'opengen', OPENGEN_BASE_URL: 'https://og.example', OPENGEN_STUB: '0' },
+          secrets: { OPENGEN_API_KEY: 'k' },
+        }),
+      ),
+    ).toEqual([])
+    expect(
+      checkConfig(
+        ready({
+          vars: { VIDEO_PROVIDER: 'opengen', OPENGEN_BASE_URL: 'http://og.example', OPENGEN_STUB: '1' },
+          secrets: { OPENGEN_API_KEY: 'k' },
+        }),
+      ).map((issue) => issue.key),
+    ).toEqual(['OPENGEN_BASE_URL', 'OPENGEN_STUB'])
+    const leaky = checkConfig(
+      ready({
+        vars: { VIDEO_PROVIDER: 'opengen', OPENGEN_BASE_URL: 'https://user:pass@og.example/v1?token=1' },
+        secrets: { OPENGEN_API_KEY: 'k' },
+      }),
+    )
+    expect(leaky.map((issue) => issue.key)).toEqual(['OPENGEN_BASE_URL'])
+    expect(leaky[0]?.message).toContain('不是厂商 Key')
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'opengen', OPENGEN_BASE_URL: 'https://og.example' }, secrets: { OPENGEN_API_KEY: 'k' } }))).not.toContain('error:FAL_KEY')
     expect(keys(ready({ secrets: { SESSION_SECRET: 'change-me-to-a-long-random-string' } }))).toEqual(['error:SESSION_SECRET'])
     expect(keys(ready({ secrets: { SESSION_SECRET: ' ' } }))).toEqual(['error:SESSION_SECRET'])
     expect(keys(ready({ secrets: { SESSION_SECRET: true } }))).toEqual([])

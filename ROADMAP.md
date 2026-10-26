@@ -201,6 +201,13 @@
   - 媒体：NanoAPI 下载素材用浏览器 UA，读视频要 Range。不支持 Range 或不带扩展名的视频地址都以 `internal_error` 失败，并全额退款。
   - 未在 aimov 验证：后台“测试连接”按钮、付费出片。
 
+**#35 运行时视频渠道与 OpenGen**（2026-10-26）
+
+- 后台 `/admin/settings` 增加「当前视频生成渠道」。运行时覆盖优先，否则 `VIDEO_PROVIDER`。创建时写入已有 `generations.provider`。jobs 提交、重试、轮询和回调只读这一列。切换约 60 秒后只影响新工单。`isProduction`（staging 与 production）保存和执行都拒绝 `mock`。
+- 可选 `opengen`：aimov 推送 `POST/GET {OPENGEN_BASE_URL}/v1/aimov/jobs`，Bearer `OPENGEN_API_KEY`。厂商 Key 不进 aimov。webhook `/api/webhooks/opengen` 只是立即轮询信号。用户积分仍是 `generation:<id>` / `generation_refund:<id>`。契约见 `docs/opengen.md`。
+- `OPENGEN_STUB=1` 只在 development / preview 走进程内联调，测试和文档标明「联调」。未配置的探测是 fail，文案含「未配置」。
+- 未做：OpenGen 真机可达和可播放成片、Cloudflare Paid、绑域名、staging 上线、改索引策略。
+
 **#6 积分分批次与过期**（2026-10-21）
 
 - 迁移 `0009_credit_grants.sql`：批次表 `credit_grants`、扣减明细 `credit_allocations`、断言表 `credit_guard`；现有余额转成永不过期的 `legacy` 批次。

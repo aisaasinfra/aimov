@@ -55,7 +55,8 @@ const PAYPAL_HOSTS = {
   sandbox: 'https://api-m.sandbox.paypal.com',
   live: 'https://api-m.paypal.com',
 }
-const VIDEO_SECRETS: Record<string, string[]> = { fal: ['FAL_KEY'], yir: ['YIR_API_KEY'], nanoapi: ['NANOAPI_API_KEY'] }
+// opengen 只检查连接信息（OPENGEN_API_KEY），不把厂商 Key 放进必填清单。URL 在下面单独查。
+const VIDEO_SECRETS: Record<string, string[]> = { fal: ['FAL_KEY'], yir: ['YIR_API_KEY'], nanoapi: ['NANOAPI_API_KEY'], opengen: ['OPENGEN_API_KEY'] }
 const MODERATION_SECRETS: Record<string, string[]> = { openai: ['OPENAI_API_KEY'], none: [] }
 const PLACEHOLDER_HOSTS = /(^|\.)(example\.(com|org|net)|localhost)$|^127\.|SUBDOMAIN/i
 
@@ -173,8 +174,26 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
 
   const video = vars('VIDEO_PROVIDER')
   if (video === 'mock') error('VIDEO_PROVIDER', 'VIDEO_PROVIDER=mock：生产环境提交生成会返回 503')
-  else if (!VIDEO_SECRETS[video]) error('VIDEO_PROVIDER', `未知的 VIDEO_PROVIDER=${video || '(空)'}，可选 fal、yir、nanoapi`)
-  else requireSecrets(VIDEO_SECRETS[video], `${video} 视频生成`)
+  else if (!VIDEO_SECRETS[video]) error('VIDEO_PROVIDER', `未知的 VIDEO_PROVIDER=${video || '(空)'}，可选 fal、yir、nanoapi、opengen`)
+  else {
+    requireSecrets(VIDEO_SECRETS[video], `${video} 视频生成`)
+    if (video === 'opengen') {
+      // 与 src/server/video/opengen.ts 的 https 规则对齐。本文件不能 import。
+      const base = vars('OPENGEN_BASE_URL')
+      let baseHost: string | null = null
+      let baseUrl: URL | null = null
+      try {
+        baseUrl = base ? new URL(base) : null
+        baseHost = baseUrl?.hostname ?? null
+      } catch {
+        baseHost = null
+      }
+      if (!base || !baseHost || !baseUrl || baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search) {
+        error('OPENGEN_BASE_URL', 'OPENGEN_BASE_URL 未配置或不是不含密钥的 https 地址：Worker 必须能访问该端点（公网 HTTPS 或隧道）。这是连接信息，不是厂商 Key')
+      }
+      if (vars('OPENGEN_STUB') === '1') error('OPENGEN_STUB', 'OPENGEN_STUB=1：联调 stub 不能用于 staging 或 production')
+    }
+  }
 
   const moderation = vars('MODERATION_PROVIDER')
   if (moderation === 'mock') error('MODERATION_PROVIDER', 'MODERATION_PROVIDER=mock：生产环境上传图片一律返回 503')

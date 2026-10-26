@@ -8,6 +8,18 @@ The in-app page is `/changelog` (six public locales: en, de, es, fr, pt-BR, zh-T
 
 站内页面是 `/changelog`（六种公开语言：en、de、es、fr、pt-BR、zh-TW）。本文件仍是仓库日志。
 
+## 2026-10-26
+
+### Added: runtime video channel and OpenGen
+
+- Admins can set the video channel at `/admin/settings`. The value overrides `VIDEO_PROVIDER` for new jobs after the settings cache (about 60 seconds). The choice is stored on the existing `generations.provider` column. Submit, retry, poll and webhooks keep using that row. `mock` cannot be saved or executed when `APP_ENV` is `production` or `staging`.
+- Optional `opengen` provider. aimov pushes submit and status to `OPENGEN_BASE_URL` with `OPENGEN_API_KEY` (a connection secret, not the vendor key). The webhook only triggers a poll. `OPENGEN_STUB=1` is a local integration stub and is refused in production. User credits stay on aimov's `generation:<id>` / `generation_refund:<id>` ledger. Contract: `docs/opengen.md`.
+- Connection probes use the same resolution as job creation. An unconfigured channel fails with copy that includes「未配置」.
+
+Upgrading a site: merge. New vars `OPENGEN_BASE_URL` (empty) and `OPENGEN_STUB` (`0`) in both wrangler files. Optional secret `OPENGEN_API_KEY` only if you select OpenGen. No migration. Real OpenGen playback is not part of this change.
+
+新增：后台可切换视频渠道，新工单锁定在 `generations.provider`；可选 OpenGen 推送渠道（只存连接 URL 和鉴权 secret，厂商 Key 留在 OpenGen）。`OPENGEN_STUB=1` 仅供 development / preview 联调。站点升级：合并即可。两份 wrangler 增加 `OPENGEN_BASE_URL`（空）和 `OPENGEN_STUB`（`0`）。要用 OpenGen 再配 secret `OPENGEN_API_KEY`。没有迁移。真实 OpenGen 出片不在这次范围内。
+
 ## 2026-10-25
 
 ### Added: LLM docs, optional error reporting, waitlist, feedback, changelog page

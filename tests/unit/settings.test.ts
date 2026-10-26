@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { site } from '#/config/site'
-import { DEFAULT_SETTINGS, dailyCapGuard, generationsToday, getSettings, mergeSettings, parseSettingsPatch } from '#/server/settings'
+import { DEFAULT_SETTINGS, dailyCapGuard, generationsToday, getSettings, mergeSettings, parseSettingsPatch, settingMatchesDefault, storedVideoProvider } from '#/server/settings'
+import { resolveEffectiveVideoProvider } from '#/server/video'
 import { ApiError } from '#/server/util'
 import { type Stmt, d1Shim, kvShim, migrate } from './d1-sqlite'
 
@@ -35,6 +36,24 @@ describe('后台提交的运营参数', () => {
     expect(parseSettingsPatch({ 'announcement.en': ` ${'x'.repeat(200)}\n\n` })).toEqual({ 'announcement.en': 'x'.repeat(200) })
   })
 
+  it('视频渠道是枚举；production 和 staging 拒绝 mock', () => {
+    expect(invalid({ videoProvider: 'kling' })).toContain('当前视频生成渠道')
+    expect(parseSettingsPatch({ videoProvider: 'mock' })).toEqual({ videoProvider: 'mock' })
+    expect(parseSettingsPatch({ videoProvider: 'opengen' }, { APP_ENV: 'production' })).toEqual({ videoProvider: 'opengen' })
+    const rejected = (appEnv: string) => {
+      try {
+        parseSettingsPatch({ videoProvider: 'mock' }, { APP_ENV: appEnv })
+      } catch (error) {
+        expect(error).toMatchObject({ status: 400, code: 'invalid_setting' })
+        return (error as ApiError).message
+      }
+      throw new Error('expected invalid_setting')
+    }
+    expect(rejected('production')).toContain('fal')
+    expect(rejected('staging')).toContain('opengen')
+    expect(rejected('production')).not.toContain('mock')
+  })
+
   it('邀请奖励的上限跟随 site.ts：site.ts 关闭邀请时只能是 0', () => {
     if (site.referralRewardCredits > 0) expect(parseSettingsPatch({ referralRewardCredits: 1000 })).toEqual({ referralRewardCredits: 1000 })
     else expect(invalid({ referralRewardCredits: 1 })).toContain('邀请奖励积分')
@@ -51,6 +70,16 @@ describe('存值合并', () => {
     expect(merged.maintenance).toBe(false)
     expect(merged['announcement.en']).toBe('Hi')
     expect(merged).not.toHaveProperty('removedField')
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('videoProvider')
+    expect(mergeSettings({ videoProvider: 'opengen' })).not.toHaveProperty('videoProvider')
+  })
+
+  it('渠道等于 VIDEO_PROVIDER 时算默认，应删覆盖；其它字段仍对照 site.ts', () => {
+    const base = { VIDEO_PROVIDER: 'fal', APP_ENV: 'production' } as unknown as Env
+    expect(settingMatchesDefault('videoProvider', 'fal', base)).toBe(true)
+    expect(settingMatchesDefault('videoProvider', 'opengen', base)).toBe(false)
+    expect(settingMatchesDefault('signupBonusCredits', site.signupBonusCredits, base)).toBe(true)
+    expect(settingMatchesDefault('signupBonusCredits', site.signupBonusCredits + 1, base)).toBe(false)
   })
 })
 
@@ -111,5 +140,19 @@ describe('读取与每日上限（SQLite）', () => {
     expect(dailyCapGuard(db, 0, now)).toEqual([])
     await run([generation(now)])
     expect(await generationsToday(db, now)).toBe(3)
+  })
+
+  it('getSettings 返回合法渠道覆盖；production 里存的 mock 丢掉，解析回落到 env', async () => {
+    store('videoProvider', JSON.stringify('yir'))
+    const loaded = await getSettings({ ...env(), APP_ENV: 'development', VIDEO_PROVIDER: 'fal' })
+    expect(loaded.videoProvider).toBe('yir')
+    expect(resolveEffectiveVideoProvider({ APP_ENV: 'development', VIDEO_PROVIDER: 'fal' } as unknown as Env, loaded)).toBe('yir')
+
+    sqlite.prepare(`UPDATE settings SET value = ? WHERE key = 'videoProvider'`).run(JSON.stringify('mock'))
+    kv.store.clear()
+    const dropped = await getSettings({ ...env(), APP_ENV: 'production', VIDEO_PROVIDER: 'fal' })
+    expect(dropped.videoProvider).toBeNull()
+    expect(storedVideoProvider({ videoProvider: 'mock' }, { APP_ENV: 'production' })).toBeNull()
+    expect(resolveEffectiveVideoProvider({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' } as unknown as Env, dropped)).toBe('fal')
   })
 })

@@ -9,8 +9,11 @@ import { paypalAccessToken, paypalMode, paypalWebhookId } from './payments/paypa
 import { STRIPE_API_VERSION } from './payments/stripe'
 import { waffoEnvironment } from './payments/waffo'
 import type { AppContext, UserRow } from './types'
+import { getSettings } from './settings'
 import { ApiError, cleanSecret, createId, parseJsonRecord } from './util'
-import { activeVideoProviderId } from './video'
+import { parseVideoProviderId, resolveEffectiveVideoProvider } from './video'
+import type { VideoProviderId } from './video/types'
+import { OPENGEN_HEALTH_PATH, describeOpenGenConfig, openGenUrl } from './video/opengen'
 
 // 后台“测试连接”：按当前配置对每个依赖做一次只读或可自行清理的探测，不建收银台、不提交生成任务。
 // 结果里只有状态和说明，不回显任何密钥（说明文字里出现的密钥值也会被替换掉）。
@@ -180,9 +183,48 @@ function balanceOutcome(amount: number, currency: string, provider: string) {
   return amount < LOW_BALANCE_USD ? warn(`鉴权正常，但${provider}余额只剩 ${text}，请尽快充值`) : ok(`鉴权正常，余额 ${text}`)
 }
 
-async function probeVideo(env: Env): Promise<Outcome> {
-  const id = activeVideoProviderId(env)
+async function probeOpenGen(env: Env): Promise<Outcome> {
+  const config = describeOpenGenConfig(env)
+  if (config.mode === 'stub') return ok('联调 stub 已开启，不访问 OpenGen 主机（不是真实厂商验收）')
+  if (config.mode === 'missing') return fail(config.message)
+  const response = await fetch(openGenUrl(config.baseUrl, OPENGEN_HEALTH_PATH), {
+    headers: { Authorization: `Bearer ${config.apiKey}`, Accept: 'application/json' },
+  })
+  if (response.status === 401 || response.status === 403) return fail('OPENGEN_API_KEY 无效')
+  if (!response.ok) return fail(`OpenGen 健康检查返回 HTTP ${response.status}`)
+  return ok('鉴权正常，OpenGen 端点可达')
+}
+
+// 与创建工单同一次解析。options.provider 指定单次探测目标；否则运行时覆盖优先，再回退 env.VIDEO_PROVIDER。
+async function resolveVideoProbe(
+  env: Env,
+  options?: { provider?: string; settings?: { videoProvider?: string | null } },
+): Promise<{ label: string; outcome: Outcome }> {
+  if (options?.provider) {
+    try {
+      const id = parseVideoProviderId(options.provider, env)
+      return { label: id, outcome: await probeVideo(env, id) }
+    } catch (error) {
+      return { label: options.provider, outcome: fail(error instanceof Error ? error.message : String(error)) }
+    }
+  }
+  const settings = options?.settings ?? (await loadVideoSettings(env))
+  try {
+    const id = resolveEffectiveVideoProvider(env, settings)
+    return { label: id, outcome: await probeVideo(env, id) }
+  } catch (error) {
+    return { label: env.VIDEO_PROVIDER || '(未配置)', outcome: fail(error instanceof Error ? error.message : String(error)) }
+  }
+}
+
+async function loadVideoSettings(env: Env): Promise<{ videoProvider: string | null }> {
+  if (!env.DB || !env.KV) return { videoProvider: null }
+  return getSettings(env)
+}
+
+async function probeVideo(env: Env, id: VideoProviderId): Promise<Outcome> {
   if (id === 'mock') return ok('mock 视频服务商，不调用外部接口')
+  if (id === 'opengen') return probeOpenGen(env)
   if (id === 'fal') {
     const key = cleanSecret(env.FAL_KEY)
     if (!key) return fail('FAL_KEY 未配置')
@@ -207,6 +249,7 @@ async function probeVideo(env: Env): Promise<Outcome> {
     if (!Number.isFinite(available)) return warn('鉴权正常，但读不到余额')
     return balanceOutcome(available, String(body?.data?.currency ?? 'USD'), ' NanoAPI ')
   }
+  if (id !== 'yir') return fail(`不支持的视频渠道：${id}`)
   const key = cleanSecret(env.YIR_API_KEY)
   if (!key) return fail('YIR_API_KEY 未配置')
   const response = await fetch('https://gateway.yir.ai/v1/balance', { headers: { Authorization: `Bearer ${key}` } })
@@ -237,7 +280,7 @@ const PROVIDER_LABEL: Record<ProbeTarget, (env: Env) => string> = {
   kv: () => 'KV',
   email: () => 'Email',
   payment: (env) => env.PAYMENT_PROVIDER || '(未配置)',
-  video: (env) => env.VIDEO_PROVIDER || '(未配置)',
+  video: (env) => env.VIDEO_PROVIDER || '(未配置)', // 实际标签在 runProbe 里改成同一次解析的结果
   moderation: (env) => env.MODERATION_PROVIDER || '(未配置)',
 }
 
@@ -251,20 +294,29 @@ function redact(message: string, env: Env) {
   return out.slice(0, 500)
 }
 
-export async function runProbe(env: Env, target: ProbeTarget, admin: UserRow): Promise<ProbeResult> {
+export async function runProbe(
+  env: Env,
+  target: ProbeTarget,
+  admin: UserRow,
+  options?: { provider?: string; settings?: { videoProvider?: string | null } },
+): Promise<ProbeResult> {
   const started = Date.now()
   let outcome: Outcome
+  let provider = PROVIDER_LABEL[target](env)
   try {
     if (target === 'storage') outcome = await probeStorage(env)
     else if (target === 'kv') outcome = await probeKv(env)
     else if (target === 'email') outcome = await probeEmail(env, admin)
     else if (target === 'payment') outcome = await probePayment(env)
-    else if (target === 'video') outcome = await probeVideo(env)
-    else outcome = await probeModeration(env)
+    else if (target === 'video') {
+      const resolved = await resolveVideoProbe(env, options)
+      provider = resolved.label
+      outcome = resolved.outcome
+    } else outcome = await probeModeration(env)
   } catch (error) {
     outcome = fail(error instanceof Error ? error.message : String(error))
   }
-  return { target, provider: PROVIDER_LABEL[target](env), status: outcome.status, message: redact(outcome.message, env), ms: Date.now() - started }
+  return { target, provider, status: outcome.status, message: redact(outcome.message, env), ms: Date.now() - started }
 }
 
 export function registerProbeAdminRoutes(routes: Hono<AppContext>) {
@@ -272,7 +324,15 @@ export function registerProbeAdminRoutes(routes: Hono<AppContext>) {
     const admin = requireAdmin(c)
     const target = c.req.param('target') as ProbeTarget
     if (!PROBE_TARGETS.includes(target)) throw new ApiError(404, 'not_found')
-    const result = await runProbe(c.env, target, admin)
+    let provider: string | undefined
+    if (target === 'video') {
+      const body = await c.req.json().catch(() => null)
+      if (body && typeof body === 'object' && typeof (body as { provider?: unknown }).provider === 'string') {
+        const value = (body as { provider: string }).provider.trim()
+        if (value) provider = value
+      }
+    }
+    const result = await runProbe(c.env, target, admin, provider ? { provider } : undefined)
     await audit(c.env, admin, 'probe.run', 'probe', target, { provider: result.provider, status: result.status })
     return c.json(result)
   })
