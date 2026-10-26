@@ -1,64 +1,40 @@
-import { useRouterState } from '@tanstack/react-router'
 import { Check } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { anchorPrice, findPlan, formatPrice, sellingPlans, site, type SubscriptionPlan } from '#/config/site'
-import { api, errorCode } from '#/lib/api'
-import { track } from '#/lib/attribution'
-import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
-import { signInHref, useSession } from '#/lib/session'
+import { useCheckout } from '#/lib/checkout'
+import { useContent } from '#/lib/i18n'
+import { useSession } from '#/lib/session'
 import { ErrorText, Spinner } from './ui'
 
 export function Pricing() {
   const c = useContent()
   const p = c.pricing
-  const locale = useLocale()
-  const lp = useLocalePath()
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const { user, config, loading } = useSession()
-  const [pending, setPending] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { config } = useSession()
+  const { buy, pending, error, checkoutPaused, paused, loading } = useCheckout()
   const channels = config?.paymentChannels ?? []
   const showChannels = channels.includes('waffo') && channels.includes('paypal')
   const [packChannel, setPackChannel] = useState('waffo')
   const shortest = site.durations[0]!
 
-  async function buy(packageId: string) {
-    if (!user) {
-      location.href = signInHref(config, pathname, lp('/sign-in'))
-      return
-    }
-    setError(null)
-    setPending(packageId)
-    const pack = site.packages.find((p) => p.id === packageId) ?? site.plans.find((p) => p.id === packageId)
-    if (pack) {
-      track('begin_checkout', {
-        value: pack.priceCents / 100,
-        currency: pack.currency,
-        items: [{ item_id: pack.id, item_name: pack.id, quantity: 1 }],
-      })
-    }
+  function startBuy(packageId: string) {
     const plan = !!findPlan(packageId) && sellingPlans.some((item) => item.id === packageId)
     const channel = showChannels ? (plan ? channels.find((id) => id !== 'paypal') : packChannel) : undefined
-    try {
-      const data = await api<{ orderId: string; url: string }>('/api/checkout', { json: { packageId, locale, ...(channel ? { channel } : {}) } })
-      location.href = data.url
-    } catch (err) {
-      setError(errorCode(err))
-      setPending(null)
-    }
+    void buy(packageId, channel)
   }
 
   function buyButton(id: string, primary: boolean, label: string) {
     return (
       <button
         type="button"
-        onClick={() => buy(id)}
-        // 会话还在加载时 user 为空，此时点击会把已登录用户误送去登录页
-        disabled={pending !== null || loading}
+        onClick={() => startBuy(id)}
+        // 会话还在加载时 user 为空，此时点击会把已登录用户误送去登录页。暂停时非管理员不可买。
+        disabled={pending !== null || loading || paused}
         className={`${primary ? 'btn-primary' : 'btn-ghost'} mt-auto w-full`}
         data-testid={`buy-${id}`}
       >
-        {pending === id ? (
+        {paused ? (
+          p.paused
+        ) : pending === id ? (
           <>
             <Spinner /> {p.buying}
           </>
@@ -71,6 +47,11 @@ export function Pricing() {
 
   return (
     <div className="space-y-6">
+      {checkoutPaused ? (
+        <p role="status" className="mx-auto max-w-2xl rounded-xl bg-amber-100 px-4 py-3 text-center text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-200" data-testid="checkout-paused">
+          {p.pausedNote}
+        </p>
+      ) : null}
       {sellingPlans.length ? (
         <>
           <div className="mx-auto max-w-2xl text-center">

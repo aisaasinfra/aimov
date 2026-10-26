@@ -41,20 +41,33 @@ function waffoReady(env: Env) {
   return Boolean(env.WAFFO_MERCHANT_ID?.trim() && env.WAFFO_PRIVATE_KEY?.trim())
 }
 
+export type CheckoutAllow = { allowWaffo?: boolean; allowPaypal?: boolean }
+
 // 结账可选通道。本地 mock 只有 mock。产品默认是 Waffo + PayPal.cn：两个都配齐就都能选。
 // Dodo / Stripe 仍可当 PAYMENT_PROVIDER，但不和这两条主通道混在一个选择器里。
-export function checkoutChannels(env: Env): PaymentProviderId[] {
+// allow 只过滤新订单，而且只在两条主通道都配齐时生效。退款和 webhook 不走这里。
+export function checkoutChannels(env: Env, allow?: CheckoutAllow): PaymentProviderId[] {
   const configured = env.PAYMENT_PROVIDER as PaymentProviderId
   if (configured === 'mock') return isProduction(env) ? [] : ['mock']
   if (configured === 'dodo' || configured === 'stripe') return [configured]
   const channels: PaymentProviderId[] = []
   if (waffoReady(env) || configured === 'waffo') channels.push('waffo')
   if (paypalReady(env) || configured === 'paypal') channels.push('paypal')
-  return channels
+  if (!channels.includes('waffo') || !channels.includes('paypal') || !allow) return channels
+  return channels.filter((id) => {
+    if (id === 'waffo') return allow.allowWaffo !== false
+    if (id === 'paypal') return allow.allowPaypal !== false
+    return true
+  })
 }
 
-export function defaultCheckoutChannel(env: Env): PaymentProviderId {
+export function dualCheckoutConfigured(env: Env) {
   const channels = checkoutChannels(env)
+  return channels.includes('waffo') && channels.includes('paypal')
+}
+
+export function defaultCheckoutChannel(env: Env, allow?: CheckoutAllow): PaymentProviderId {
+  const channels = checkoutChannels(env, allow)
   const configured = env.PAYMENT_PROVIDER as PaymentProviderId
   if (channels.includes(configured)) return configured
   if (channels.includes('waffo')) return 'waffo'
@@ -63,8 +76,8 @@ export function defaultCheckoutChannel(env: Env): PaymentProviderId {
 }
 
 // 积分包用买家选的通道（没选就用默认）。订阅不能走 PayPal，落到 Waffo / Dodo / Stripe / mock。
-export function resolveCheckoutChannel(env: Env, requested: string | undefined, packageId: string): PaymentProviderId {
-  const channels = checkoutChannels(env)
+export function resolveCheckoutChannel(env: Env, requested: string | undefined, packageId: string, allow?: CheckoutAllow): PaymentProviderId {
+  const channels = checkoutChannels(env, allow)
   if (!channels.length) throw new ApiError(503, 'payment_not_configured', `Unsupported PAYMENT_PROVIDER: ${env.PAYMENT_PROVIDER}`)
   const plan = !!findPlan(packageId)
   const allowed = plan ? channels.filter((id) => id !== 'paypal') : channels
@@ -74,7 +87,7 @@ export function resolveCheckoutChannel(env: Env, requested: string | undefined, 
     if (plan && requested === 'paypal') throw new ApiError(400, 'paypal_packs_only', 'PayPal checkout only sells credit packs')
     return requested as PaymentProviderId
   }
-  const preferred = defaultCheckoutChannel(env)
+  const preferred = defaultCheckoutChannel(env, allow)
   if (allowed.includes(preferred)) return preferred
   return allowed[0]!
 }

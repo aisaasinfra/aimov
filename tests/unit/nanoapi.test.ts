@@ -90,6 +90,17 @@ describe('nanoapi provider：提交', () => {
     expect(posts()[2]!.body).toMatchObject({ mode: 'replace_object', prompt: 'Replace the dancer' })
   })
 
+  it('非空 scenePrompt 覆盖站点 prompt；纯空白回退到站点 prompt', async () => {
+    nano.prompt = 'Site prompt'
+    const calls = stubFetch({ 'GET /v1/tasks': empty, 'POST /v1/tasks': () => ok({ id: 'tk_scene', status: 'queued' }) })
+    const provider = createNanoapiProvider(env())
+    await provider.submit({ ...input(), meta: { scenePrompt: '  Snow in Prague  ' } })
+    expect(calls.filter((call) => call.method === 'POST')[0]!.body).toMatchObject({ prompt: 'Snow in Prague' })
+
+    await provider.submit({ ...input(), meta: { scenePrompt: '   ' } })
+    expect(calls.filter((call) => call.method === 'POST')[1]!.body).toMatchObject({ prompt: 'Site prompt' })
+  })
+
   it('创建前已有同一个任务（图片和源视频地址都相同）：沿用它的 id，不再创建，不论状态', async () => {
     const calls = stubFetch({
       'GET /v1/tasks': () =>

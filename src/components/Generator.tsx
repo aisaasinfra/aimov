@@ -1,6 +1,6 @@
 import { useRouterState } from '@tanstack/react-router'
 import { CircleAlert, CircleCheck, Download } from 'lucide-react'
-import { site } from '#/config/site'
+import { formatPrice, site } from '#/config/site'
 import { isActiveGeneration, type Generation } from '#/lib/api'
 import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
 import { signInHref, useSession } from '#/lib/session'
@@ -15,7 +15,8 @@ export function Generator() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { user, config, loading } = useSession()
   const play = usePlay()
-  const { photo, uploading, dragging, busy, consent, shortfall, error, generation } = play
+  const { photo, uploading, dragging, busy, consent, shortfall, error, generation, coverPack, buyCover, checkoutPending, checkoutError, checkoutBlocked } = play
+  const pricing = c.pricing
   const world = templateCopy(playCopy.templates, play.template.id)
 
   return (
@@ -102,9 +103,35 @@ export function Generator() {
             <a href={signInHref(config, pathname, lp('/sign-in'))} className="btn-berry w-full py-3.5" data-testid="generator-sign-up">
               {playCopy.create}
             </a>
+          ) : shortfall > 0 && coverPack ? (
+            <>
+              <button
+                type="button"
+                className="btn-berry w-full py-3.5"
+                disabled={checkoutPending !== null || checkoutBlocked}
+                onClick={buyCover}
+                data-testid="generator-buy"
+              >
+                {checkoutBlocked ? (
+                  pricing.paused
+                ) : checkoutPending === coverPack.id ? (
+                  <>
+                    <Spinner /> {pricing.buying}
+                  </>
+                ) : (
+                  g.ctaBuyPack(coverPack.credits, formatPrice(coverPack.priceCents, coverPack.currency))
+                )}
+              </button>
+              <p className="text-center text-xs">
+                <LocalLink to="/pricing" className="text-muted underline" data-testid="generator-see-packs">
+                  {g.seePacks}
+                </LocalLink>
+              </p>
+              <ErrorText code={checkoutError} />
+            </>
           ) : shortfall > 0 ? (
             <LocalLink to="/pricing" className="btn-berry w-full py-3.5" data-testid="generator-buy">
-              {g.ctaBuy}
+              {checkoutBlocked ? pricing.paused : g.ctaBuy}
             </LocalLink>
           ) : (
             <button

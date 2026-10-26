@@ -24,7 +24,7 @@ import { processPaymentEvent } from './orders'
 import { reconcileOrder, reconcilePendingOrders } from './reconcile'
 import { normalizeCode, redeemCode } from './redeem'
 import { REFERRAL_COOKIE, ensureReferralCode, normalizeReferralCode, referralSummary, requestReferral } from './referrals'
-import { assertOpen, dailyCapGuard, generationsToday, getSettings, publicNotice, referralActive } from './settings'
+import { assertCheckoutOpen, assertOpen, dailyCapGuard, generationsToday, getSettings, publicNotice, referralActive } from './settings'
 import { seoRoutes } from './seo'
 import { assertShareable, findSharedGeneration, loadShare, readSharePoster, startShare, stopShare } from './shares'
 import { notifyContactMessage, runTakedownReminders } from './notifications'
@@ -132,10 +132,11 @@ app.post(CLIENT_ERROR_PATH, async (c) => {
 
 app.get('/api/me', async (c) => {
   const user = c.get('user')
-  const paymentChannels = checkoutChannels(c.env)
+  const settings = await getSettings(c.env)
+  const paymentChannels = checkoutChannels(c.env, settings)
   let paymentProvider = c.env.PAYMENT_PROVIDER
   try {
-    paymentProvider = defaultCheckoutChannel(c.env)
+    paymentProvider = defaultCheckoutChannel(c.env, settings)
   } catch {
     // 生产环境 mock 没有可用通道。把原始配置交出去，巡检才能看见它仍是 mock。
   }
@@ -147,7 +148,7 @@ app.get('/api/me', async (c) => {
       paymentProvider,
       paymentChannels,
       turnstileSiteKey: turnstileSiteKey(c.env),
-      notice: publicNotice(await getSettings(c.env)),
+      notice: publicNotice(settings),
     },
   })
 })
@@ -516,7 +517,8 @@ app.post('/api/redeem', async (c) => {
 
 app.post('/api/checkout', async (c) => {
   const user = requireUser(c)
-  assertOpen(await getSettings(c.env), user)
+  const settings = await getSettings(c.env)
+  assertCheckoutOpen(settings, user)
   await rateLimit(c.env.AUTH_LIMITER, `checkout:${user.id}`)
   const body = await readJson<{ packageId: string; locale: string; channel?: string }>(c)
   // packageId 可以是积分包或在售的订阅套餐（订阅开关关掉时套餐不能再下单）
@@ -527,7 +529,7 @@ app.post('/api/checkout', async (c) => {
   const locale = isLocale(body.locale) ? body.locale : 'en'
   await rememberLocale(c.env, user, body.locale)
   // 先定通道再插订单：PayPal 只卖积分包，选错时不留下 pending 订单
-  const channel = resolveCheckoutChannel(c.env, typeof body.channel === 'string' ? body.channel : undefined, pack.id)
+  const channel = resolveCheckoutChannel(c.env, typeof body.channel === 'string' ? body.channel : undefined, pack.id, settings)
   const provider = getOrderProvider(c.env, channel)
   if (!provider) throw new ApiError(503, 'payment_not_configured', `Unsupported channel: ${channel}`)
   const id = createId('ord')

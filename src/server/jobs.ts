@@ -1,4 +1,4 @@
-import { findDuration } from '#/config/site'
+import { findDuration, findVideoTemplate, templateSourceFile } from '#/config/site'
 import { jobToken, signedUploadUrl, templateSourceUrl } from './media'
 import { expireStatements, generationRefundStatements } from './credits'
 import { notifyGenerationFinished } from './notifications'
@@ -105,7 +105,31 @@ export async function handleVideoJob(env: Env, message: VideoJobMessage) {
   else await pollGeneration(env, generation)
 }
 
+async function enqueuePoll(env: Env, generation: GenerationRow) {
+  const provider = getVideoProvider(env, generation.provider)
+  await enqueueJob(env, { kind: 'poll', generationId: generation.id }, POLL_DELAY_SECONDS[provider.id])
+}
+
+// 服务商已经接受过：只补一次轮询。不要再 submit，也不要把行打回 queued。
+async function resumeAccepted(env: Env, generation: GenerationRow) {
+  if (generation.status !== 'queued' && generation.status !== 'processing') return
+  if (generation.status === 'queued') {
+    const resumed = await env.DB.prepare(
+      `UPDATE generations SET status = 'processing', updated_at = ? WHERE id = ? AND status = 'queued'`,
+    )
+      .bind(nowIso(), generation.id)
+      .run()
+    if (!resumed.meta.changes) return
+  }
+  await enqueuePoll(env, generation)
+}
+
 async function submitGeneration(env: Env, generation: GenerationRow) {
+  // provider_request_id 一旦写下，这次接受就已经发生。队列重投只入 poll。
+  if (generation.provider_request_id) {
+    await resumeAccepted(env, generation)
+    return
+  }
   if (generation.status !== 'queued') return
   // 先抢占：队列至少投递一次，重复消息不能重复向 provider 提交（会重复计费）
   const claimed = await env.DB.prepare(
@@ -123,9 +147,13 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
   }
 
   const baseMeta = parseMeta(generation.provider_meta)
+  const template = findVideoTemplate(generation.template_id)
+  const sourceFile = templateSourceFile(template, duration)
 
   // 签名和渠道解析都在 try 里：mock / 未知渠道、或生产环境 SESSION_SECRET 配错时抛错，
   // 要和提交失败一样放回 queued，交给队列重试和死信退款。渠道只读这一行的 provider。
+  // 请求 id 已经落库之后不再放回 queued：enqueue 失败时重投只补 poll，避免 fal / NanoAPI / OpenGen 再开一单。
+  let accepted = false
   try {
     const provider = getVideoProvider(env, generation.provider)
     const webhookUrl = new URL(`/api/webhooks/${provider.id}`, env.SITE_URL)
@@ -136,8 +164,8 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
       generationId: generation.id,
       durationSeconds: generation.duration_seconds,
       imageUrl: await signedUploadUrl(env, upload.id, Date.parse(generation.created_at)),
-      sourceVideoUrl: templateSourceUrl(env, duration.source),
-      sourceVideoKey: `templates/${duration.source}`,
+      sourceVideoUrl: templateSourceUrl(env, sourceFile),
+      sourceVideoKey: `templates/${sourceFile}`,
       webhookUrl: webhookUrl.toString(),
       meta: baseMeta,
     })
@@ -147,13 +175,15 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
     )
       .bind(result.requestId, JSON.stringify(result.meta), now, now, generation.id)
       .run()
+    accepted = true
     await enqueueJob(env, { kind: 'poll', generationId: generation.id }, POLL_DELAY_SECONDS[provider.id])
   } catch (error) {
+    if (accepted) throw error
     if (error instanceof VideoProviderError && !error.retryable) {
       await failGeneration(env, generation.id, error.code, error.message)
       return
     }
-    // 可重试：放回 queued，让队列重投时重新抢占
+    // 还没被服务商接受：放回 queued，让队列重投时重新抢占
     await env.DB.prepare(`UPDATE generations SET status = 'queued', updated_at = ? WHERE id = ? AND status = 'processing'`)
       .bind(nowIso(), generation.id)
       .run()
