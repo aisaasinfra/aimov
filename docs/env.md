@@ -29,7 +29,9 @@
 | `PAYPAL_MODE` | `sandbox`、`live`；留空按 `sandbox` | 用 PayPal 时 | PayPal.cn 与全球站共用 Orders v2，没有单独的中国 API。`live` 才打 `https://api-m.paypal.com`，否则用 `https://api-m.sandbox.paypal.com`。webhook 证书主机必须和模式一致 |
 | `PAYPAL_API_BASE` | 留空，或与当前模式的官方主机完全一致 | 否 | 填了别的主机时通道关闭，上线检查报错。不要拿它改到非官方地址 |
 | `PAYPAL_PRODUCTS` | JSON，可留 `{}` | 否 | PayPal 按订单金额收积分包，不要求每个套餐都有商品 id。订阅不走 PayPal |
-| `VIDEO_PROVIDER` | `fal`、`yir`、`nanoapi`、`mock` | 是 | 模型和单价在 `site.video` 里配置，yir 的配置在 `site.video.yir`，NanoAPI 的在 `site.video.nanoapi`。本地默认 `mock`，不需要 NanoAPI 密钥 |
+| `VIDEO_PROVIDER` | `fal`、`yir`、`nanoapi`、`opengen`、`mock` | 是 | 没有后台覆盖时的回退渠道。创建工单写入 `generations.provider`，之后提交、重试、轮询只读这一列。后台「当前视频生成渠道」优先于本变量，约 60 秒缓存后只影响新工单。模型和单价在 `site.video`。`mock` 只允许 development / preview。OpenGen 见 [opengen.md](opengen.md) |
+| `OPENGEN_BASE_URL` | 公网 `https://…` 或隧道；可空 | 用 OpenGen 时 | Worker 必须能访问该地址。不要在 URL 里放账号或查询串。development / preview 也接受 `http://`。这是连接地址，不是厂商 Key。本地 `wrangler dev` 可以用 `.dev.vars` 覆盖；不要放进 `.dev.vars.production`（它是 var，`sync-secrets` 会拒绝） |
+| `OPENGEN_STUB` | `0`、`1` | 否 | `1` 且非 production 时走进程内联调 stub，不访问网络。测试和文档把它标成「联调」，不是真实厂商验收。staging / production 拒绝 `1`。默认 `0` |
 | `MODERATION_PROVIDER` | `openai`、`none`、`mock` | 是 | 上传图片的审核方式。`none` 不审核，检查时给出警告 |
 | `GOOGLE_CLIENT_ID` | OAuth Client ID | 是 | 站点只有 Google 登录，留空就没人能登录 |
 | `TURNSTILE_SITE_KEY` | 站点密钥 | 否 | 留空则留言和举报表单不做人机校验，检查时给出警告 |
@@ -49,6 +51,7 @@
 | `FAL_KEY` | `VIDEO_PROVIDER=fal` | |
 | `YIR_API_KEY` | `VIDEO_PROVIDER=yir` | 可选 secret，类型声明在 `src/env.d.ts`。建议在 yir Console 给这个 Key 设月度额度，见 README 的“视频服务商” |
 | `NANOAPI_API_KEY` | `VIDEO_PROVIDER=nanoapi` | 可选 secret，类型声明在 `src/env.d.ts`。`mock`、`fal`、`yir` 都不读它。NanoAPI 没有月度额度，余额用完提交会返回 402，见 README 的“视频服务商” |
+| `OPENGEN_API_KEY` | 后台切到 `opengen`，或 `VIDEO_PROVIDER=opengen` | 可选 secret，类型声明在 `src/env.d.ts`。Bearer 连接鉴权，不是 OpenGen 主机上的厂商 Key。fal、yir、nanoapi、mock 都不读它。没配时探测失败，文案含「未配置」；提交失败并退点 |
 | `OPENAI_API_KEY` | `MODERATION_PROVIDER=openai` | 可选 secret，类型声明在 `src/env.d.ts` |
 | `TURNSTILE_SECRET_KEY` | 配了 `TURNSTILE_SITE_KEY` | 同上 |
 | `PAYMENT_NOTIFY_WEBHOOK_URL` | 可选 | 每笔订单首次入账（含后台补单）时往聊天群发一条付款消息：金额、套餐、积分、来源和订单号。按域名识别：Telegram 填 `https://api.telegram.org/bot<token>/sendMessage?chat_id=<id>`；飞书 / Lark 填自定义机器人地址（不要开“签名校验”，可以用关键词“新付款”）；Discord 填频道 webhook；其他地址（如 Slack Incoming Webhook）发 `{"text": ...}`。发送失败只记日志，不影响入账。地址里带 token，所以放 secret。可选 secret，类型声明在 `src/env.d.ts` |

@@ -12,6 +12,7 @@ type Field =
   | { key: string; kind: 'bool'; label: string; help: string }
   | { key: string; kind: 'int'; label: string; help: string; min: number; max: number }
   | { key: string; kind: 'text'; label: string; help: string; maxLength: number }
+  | { key: string; kind: 'enum'; label: string; help: string; options: { value: string; label: string }[] }
 type Value = boolean | number | string
 type Data = {
   fields: Field[]
@@ -26,7 +27,7 @@ const PROBES = [
   { target: 'kv', label: 'KV', help: '写入、读取、删除一个临时键' },
   { target: 'email', label: '发信', help: '给你的邮箱发一封测试邮件' },
   { target: 'payment', label: '支付', help: '只读查询：鉴权，Dodo 另核对每个套餐的商品和价格；不建收银台' },
-  { target: 'video', label: '视频生成', help: '只读查询：鉴权和账户余额；不提交任务' },
+  { target: 'video', label: '视频生成', help: '只读查询当前视频渠道的鉴权或健康检查，不提交任务。渠道与创建工单用同一次解析。' },
   { target: 'moderation', label: '图片审核', help: '只读查询：鉴权和审核模型是否可用' },
 ] as const
 
@@ -100,6 +101,22 @@ function AdminSettings() {
                     <label className="flex items-center gap-2 font-medium">
                       <input type="checkbox" checked={value === true} onChange={(e) => setForm((f) => ({ ...f, [field.key]: e.target.checked }))} data-testid={`setting-${field.key}`} />
                       {field.label}
+                    </label>
+                  ) : field.kind === 'enum' ? (
+                    <label className="block space-y-1">
+                      <span className="font-medium">{field.label}</span>
+                      <select
+                        className="input"
+                        value={String(value ?? '')}
+                        onChange={(e) => setForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                        data-testid={`setting-${field.key}`}
+                      >
+                        {field.options.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                   ) : (
                     <label className="block space-y-1">

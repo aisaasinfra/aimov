@@ -49,7 +49,7 @@ import { createTakedown, isBlockedMedia, parseTakedown, type TakedownInput } fro
 import { turnstileSiteKey, verifyTurnstile } from './turnstile'
 import type { AppContext, GenerationRow, OrderRow, UploadRow, UserRow } from './types'
 import { ApiError, constantTimeEqual, createId, isCheckConstraintError, isProduction, nowIso, randomToken, sha256Hex } from './util'
-import { activeVideoProviderId } from './video'
+import { resolveEffectiveVideoProvider } from './video'
 
 const MAX_ACTIVE_JOBS_PER_USER = 3
 
@@ -337,7 +337,7 @@ app.post('/api/generations', async (c) => {
   if (cap > 0 && (await generationsToday(db, nowIso())) >= cap) throw new ApiError(429, 'daily_limit')
   await rememberLocale(c.env, user, body.locale)
 
-  const providerId = activeVideoProviderId(c.env)
+  const providerId = resolveEffectiveVideoProvider(c.env, settings)
   const mockOutcome = providerId === 'mock' && (body.mockOutcome === 'fail' || body.mockOutcome === 'hang') ? body.mockOutcome : null
   const scenePrompt = template ? templatePrompt(template, body.locale) : ''
   const metaObject: Record<string, string> = {}
@@ -841,9 +841,9 @@ app.post('/api/webhooks/paypal', async (c) => {
   return c.json({ received: true, ...result })
 })
 
-// 视频服务商完成回调（fal、yir、nanoapi）：只当作“立即轮询”的信号，真实结果由 jobs.ts 用 API key 拉取，
-// 所以只校验地址里的任务 token，不验 yir 的签名头；nanoapi 的回调不带签名，同样只靠地址里的 token
-for (const provider of ['fal', 'yir', 'nanoapi']) {
+// 视频服务商完成回调（fal、yir、nanoapi、opengen）：只当作“立即轮询”的信号，真实结果由 jobs.ts 按工单行上的 provider 拉取，
+// 所以只校验地址里的任务 token，不验服务商签名头
+for (const provider of ['fal', 'yir', 'nanoapi', 'opengen']) {
   app.post(`/api/webhooks/${provider}`, async (c) => {
     const generationId = c.req.query('gen') ?? ''
     const token = c.req.query('token') ?? ''

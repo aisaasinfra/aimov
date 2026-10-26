@@ -20,8 +20,11 @@ export type VideoStatus =
   | { state: 'completed'; output: { url: string } | { r2Key: string }; costCents?: number }
   | { state: 'failed'; code: string; message: string; retryable?: boolean }
 
+export const VIDEO_PROVIDER_IDS = ['fal', 'yir', 'nanoapi', 'opengen', 'mock'] as const
+export type VideoProviderId = (typeof VIDEO_PROVIDER_IDS)[number]
+
 export interface VideoProvider {
-  id: 'fal' | 'yir' | 'nanoapi' | 'mock'
+  id: VideoProviderId
   submit(input: VideoSubmitInput): Promise<VideoSubmitResult>
   status(requestId: string, meta: Record<string, unknown>): Promise<VideoStatus>
   // 出一条成片的估算成本（美分），出片后写入 generations.provider_cost_cents

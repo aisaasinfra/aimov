@@ -1,9 +1,10 @@
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { site } from '#/config/site'
 import { resetPaypalForTests } from '#/server/payments/paypal'
 import { runProbe } from '#/server/probes'
 import type { UserRow } from '#/server/types'
-import { kvShim } from './d1-sqlite'
+import { d1Shim, kvShim, migrate } from './d1-sqlite'
 
 const admin = { id: 'usr_admin', email: 'admin@example.com', role: 'admin' } as UserRow
 const DODO_KEY = 'dodo_test_key_1234567890'
@@ -208,6 +209,92 @@ describe('视频服务商探测', () => {
     const result = await probe('video', { VIDEO_PROVIDER: 'fal', FAL_KEY: `${key}\n`, OPENAI_API_KEY: 'sk-other-secret', SITE_URL: 'http://localhost' })
     expect(result.status).toBe('fail')
     expect(result.message).toBe('connect failed for Key *** (OPENAI ***)')
+  })
+
+  it('env 是 fal、运行时是 yir：探测跟运行时，标签是 yir', async () => {
+    const calls = stubFetch({ 'gateway.yir.ai/v1/balance': { body: { available_amount: 20, currency: 'USD' } } })
+    const result = await runProbe({ VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', YIR_API_KEY: 'yir_key_abcdefgh', APP_ENV: 'development' } as unknown as Env, 'video', admin, {
+      settings: { videoProvider: 'yir' },
+    })
+    expect(result).toMatchObject({ status: 'ok', provider: 'yir' })
+    expect(calls[0]?.url).toContain('gateway.yir.ai')
+    expect(calls.some((call) => call.url.includes('api.fal.ai'))).toBe(false)
+  })
+
+  it('显式探测目标优先于运行时；未配置是 fail 且文案含未配置，不是 skipped', async () => {
+    const calls = stubFetch({})
+    const result = await runProbe({ VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', APP_ENV: 'development' } as unknown as Env, 'video', admin, {
+      provider: 'opengen',
+      settings: { videoProvider: 'yir' },
+    })
+    expect(result.status).toBe('fail')
+    expect(result.status).not.toBe('skipped')
+    expect(result.provider).toBe('opengen')
+    expect(result.message).toContain('未配置')
+    expect(calls).toEqual([])
+  })
+
+  it('非法渠道探测失败，标签保留请求值', async () => {
+    const result = await runProbe({ VIDEO_PROVIDER: 'fal', APP_ENV: 'production' } as unknown as Env, 'video', admin, { provider: 'kling' })
+    expect(result).toMatchObject({ status: 'fail', provider: 'kling' })
+    expect(result.message).toContain('VIDEO_PROVIDER')
+  })
+
+  it('联调 stub 的探测文案含联调，且不发请求；production 忽略 stub 并报未配置', async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    const stubbed = await probe('video', { VIDEO_PROVIDER: 'opengen', OPENGEN_STUB: '1', APP_ENV: 'preview' })
+    expect(stubbed).toMatchObject({ status: 'ok', provider: 'opengen' })
+    expect(stubbed.message).toContain('联调')
+    const blocked = await probe('video', { VIDEO_PROVIDER: 'opengen', OPENGEN_STUB: '1', APP_ENV: 'production' })
+    expect(blocked.status).toBe('fail')
+    expect(blocked.message).toContain('未配置')
+    expect(blocked.status).not.toBe('skipped')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('配了地址和密钥时探测打健康检查；401 报密钥无效', async () => {
+    const calls = stubFetch({ 'og.example/base/v1/aimov/health': { body: { ok: true } } })
+    const okResult = await probe('video', {
+      VIDEO_PROVIDER: 'opengen',
+      APP_ENV: 'production',
+      OPENGEN_BASE_URL: 'https://og.example/base/',
+      OPENGEN_API_KEY: 'og_secret_key_123',
+      OPENGEN_STUB: '0',
+    })
+    expect(okResult).toMatchObject({ status: 'ok', provider: 'opengen', message: '鉴权正常，OpenGen 端点可达' })
+    expect(calls[0]).toMatchObject({ url: 'https://og.example/base/v1/aimov/health', auth: 'Bearer og_secret_key_123' })
+    stubFetch({ 'og.example': { status: 401 } })
+    expect(await probe('video', { VIDEO_PROVIDER: 'opengen', APP_ENV: 'production', OPENGEN_BASE_URL: 'https://og.example', OPENGEN_API_KEY: 'og_secret_key_123' })).toMatchObject({
+      status: 'fail',
+      message: 'OPENGEN_API_KEY 无效',
+    })
+  })
+
+  it('库里的渠道覆盖优先于 env；production 里存的 mock 回落到 env', async () => {
+    const sqlite = new DatabaseSync(':memory:')
+    migrate(sqlite)
+    sqlite.prepare(`INSERT INTO settings (key, value, updated_at) VALUES ('videoProvider', ?, '2026-10-26')`).run(JSON.stringify('yir'))
+    const kv = kvShim()
+    const db = d1Shim(sqlite)
+    const calls = stubFetch({ 'gateway.yir.ai/v1/balance': { body: { available_amount: 20, currency: 'USD' } } })
+    const runtime = await runProbe(
+      { DB: db, KV: kv, VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', YIR_API_KEY: 'yir_key_abcdefgh', APP_ENV: 'development' } as unknown as Env,
+      'video',
+      admin,
+    )
+    expect(runtime).toMatchObject({ status: 'ok', provider: 'yir' })
+    expect(calls[0]?.url).toContain('gateway.yir.ai')
+
+    sqlite.prepare(`UPDATE settings SET value = ? WHERE key = 'videoProvider'`).run(JSON.stringify('mock'))
+    kv.store.clear()
+    stubFetch({ 'api.fal.ai/v1/account/billing': { body: { credits: { current_balance: 10, currency: 'USD' } } } })
+    const dropped = await runProbe(
+      { DB: db, KV: kv, VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', APP_ENV: 'production' } as unknown as Env,
+      'video',
+      admin,
+    )
+    expect(dropped).toMatchObject({ status: 'ok', provider: 'fal' })
   })
 })
 

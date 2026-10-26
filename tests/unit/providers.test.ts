@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { activePaymentProviderId, checkoutChannels, resolveCheckoutChannel } from '#/server/payments'
-import { activeVideoProviderId } from '#/server/video'
+import { activeVideoProviderId, getVideoProvider, resolveEffectiveVideoProvider } from '#/server/video'
 
 // mock 支付/生成在生产环境必须不可用，否则任何人都能免费充值
 describe('provider 选择', () => {
@@ -25,6 +25,17 @@ describe('provider 选择', () => {
     expect(activeVideoProviderId(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }))).toBe('fal')
     expect(activeVideoProviderId(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'yir' }))).toBe('yir')
     expect(activeVideoProviderId(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'nanoapi' }))).toBe('nanoapi')
+    expect(activeVideoProviderId(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'opengen' }))).toBe('opengen')
+    expect(() => activeVideoProviderId(env({ APP_ENV: 'staging', VIDEO_PROVIDER: 'mock' }))).toThrow(/VIDEO_PROVIDER/)
+  })
+
+  it('运行时渠道覆盖 env；production 下的 mock 覆盖不是合法渠道', () => {
+    expect(resolveEffectiveVideoProvider(env({ APP_ENV: 'development', VIDEO_PROVIDER: 'mock' }), { videoProvider: 'opengen' })).toBe('opengen')
+    expect(resolveEffectiveVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), { videoProvider: null })).toBe('fal')
+    expect(resolveEffectiveVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), { videoProvider: '' })).toBe('fal')
+    expect(() => resolveEffectiveVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), { videoProvider: 'mock' })).toThrow(/VIDEO_PROVIDER/)
+    expect(getVideoProvider(env({ APP_ENV: 'development', OPENGEN_STUB: '1' }), 'opengen').id).toBe('opengen')
+    expect(() => getVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), 'mock')).toThrow(/video provider/)
   })
 
   it('本地 mock 忽略残留的 PayPal 密钥；Waffo 默认，PayPal 只卖积分包', () => {

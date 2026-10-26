@@ -4,6 +4,8 @@ interface Env {
   OPENAI_API_KEY?: string
   YIR_API_KEY?: string
   NANOAPI_API_KEY?: string
+  // OpenGen 连接鉴权。不是厂商 Key；厂商 Key 留在 OpenGen 主机。
+  OPENGEN_API_KEY?: string
   STRIPE_SECRET_KEY?: string
   STRIPE_WEBHOOK_SECRET?: string
   PAYMENT_NOTIFY_WEBHOOK_URL?: string

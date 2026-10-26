@@ -3,6 +3,8 @@ import { LOCALES, LOCALE_META, site, type Locale } from '#/config/site'
 import { audit, readJson, requireAdmin } from './http'
 import type { AppContext, UserRow } from './types'
 import { ApiError, nowIso } from './util'
+import { parseVideoProviderId, videoProviderOptions } from './video'
+import type { VideoProviderId } from './video/types'
 
 // 后台运营参数：只放非敏感、不改代码就要能调的参数；密钥仍放 wrangler secrets，不进数据库。
 // 存在 D1 的 settings 表，读取走 KV 缓存（cacheTtl 60 秒），保存后最多约 60 秒在各地生效。
@@ -16,15 +18,35 @@ export type RuntimeSettings = {
   generationDailyCap: number
 } & Record<`announcement.${Locale}`, string>
 
-export type SettingKey = keyof RuntimeSettings
+// videoProvider 不在 RuntimeSettings 里：它的默认值是当前 env.VIDEO_PROVIDER，不能写进静态 DEFAULT_SETTINGS。
+export type LoadedSettings = RuntimeSettings & { videoProvider: VideoProviderId | null }
+
+export type SettingKey = keyof RuntimeSettings | 'videoProvider'
 
 type FieldBase = { key: SettingKey; label: string; help: string }
 export type SettingField =
   | (FieldBase & { kind: 'bool' })
   | (FieldBase & { kind: 'int'; min: number; max: number })
   | (FieldBase & { kind: 'text'; maxLength: number })
+  | (FieldBase & { kind: 'enum'; options: readonly { value: string; label: string }[] })
 
 const referralOn = site.referralRewardCredits > 0
+
+const VIDEO_PROVIDER_HELP =
+  '新创建的工单锁定为这里的渠道，约 60 秒缓存后生效。已排队或处理中的工单继续用创建时写入的渠道。未改时与环境变量 VIDEO_PROVIDER 相同，保存成那个值会删掉覆盖。mock 只在 development / preview 出现。密钥不在这里：fal / yir / nanoapi 仍用各自 secret；OpenGen 只配 OPENGEN_BASE_URL 和 OPENGEN_API_KEY，厂商 Key 留在 OpenGen 主机。没配连接信息的渠道仍可选，提交时按失败退点。'
+
+export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
+  return [
+    {
+      key: 'videoProvider',
+      kind: 'enum',
+      label: '当前视频生成渠道',
+      help: VIDEO_PROVIDER_HELP,
+      options: videoProviderOptions(env),
+    },
+    ...SETTING_FIELDS,
+  ]
+}
 
 export const SETTING_FIELDS: readonly SettingField[] = [
   {
@@ -74,43 +96,68 @@ export const DEFAULT_SETTINGS: RuntimeSettings = {
 }
 
 const CACHE_KEY = 'settings:v1'
-const fieldOf = (key: string) => SETTING_FIELDS.find((f) => f.key === key)
+const fieldOf = (key: string, env: { APP_ENV?: string }) => settingFields(env).find((f) => f.key === key)
 
 function isValid(field: SettingField, value: unknown) {
   if (field.kind === 'bool') return typeof value === 'boolean'
   if (field.kind === 'int') return Number.isInteger(value) && (value as number) >= field.min && (value as number) <= field.max
+  if (field.kind === 'enum') return typeof value === 'string' && field.options.some((option) => option.value === value)
   return typeof value === 'string' && value.length <= field.maxLength
+}
+
+// 存值等于这条渠道的环境变量默认时删覆盖行。其它字段仍对照静态 DEFAULT_SETTINGS。
+export function settingMatchesDefault(key: string, value: unknown, env: Env) {
+  if (key === 'videoProvider') return value === (env.VIDEO_PROVIDER ?? '')
+  return key in DEFAULT_SETTINGS && value === DEFAULT_SETTINGS[key as keyof RuntimeSettings]
+}
+
+// 合法覆盖；mock 在 production / staging、未知值都丢掉，回退到 env.VIDEO_PROVIDER
+export function storedVideoProvider(stored: Record<string, unknown>, env: { APP_ENV?: string }): VideoProviderId | null {
+  const value = stored.videoProvider
+  if (typeof value !== 'string' || !value) return null
+  try {
+    return parseVideoProviderId(value, env)
+  } catch {
+    return null
+  }
 }
 
 // 存值合并到默认值上：未知字段、类型或范围不对的值（例如 site.ts 收紧了范围）丢弃，用默认值
 export function mergeSettings(stored: Record<string, unknown>): RuntimeSettings {
   const merged: Record<string, unknown> = { ...DEFAULT_SETTINGS }
   for (const [key, value] of Object.entries(stored)) {
-    const field = fieldOf(key)
+    // 渠道覆盖不进静态默认值，由 storedVideoProvider / resolveEffectiveVideoProvider 单独读
+    const field = SETTING_FIELDS.find((item) => item.key === key)
     if (field && isValid(field, value)) merged[key] = value
   }
   return merged as RuntimeSettings
 }
 
 // 后台提交的修改：未知字段或值不合法时整体拒绝（400 invalid_setting，message 说明是哪一项）
-export function parseSettingsPatch(input: unknown): Partial<RuntimeSettings> {
+export function parseSettingsPatch(input: unknown, env: { APP_ENV?: string } = {}): Partial<RuntimeSettings & { videoProvider: VideoProviderId }> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ApiError(400, 'invalid_setting', '没有要保存的参数')
   const entries = Object.entries(input as Record<string, unknown>)
   if (entries.length === 0) throw new ApiError(400, 'invalid_setting', '没有要保存的参数')
   const patch: Record<string, unknown> = {}
   for (const [key, raw] of entries) {
-    const field = fieldOf(key)
+    const field = fieldOf(key, env)
     if (!field) throw new ApiError(400, 'invalid_setting', `未知参数：${key}`)
     // 公告只存一行纯文本
     const value = field.kind === 'text' && typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : raw
     if (!isValid(field, value)) {
       const rule =
-        field.kind === 'int' ? `${field.min}–${field.max} 的整数` : field.kind === 'text' ? `不超过 ${field.maxLength} 个字符` : '开或关'
+        field.kind === 'int'
+          ? `${field.min}–${field.max} 的整数`
+          : field.kind === 'text'
+            ? `不超过 ${field.maxLength} 个字符`
+            : field.kind === 'enum'
+              ? `以下之一：${field.options.map((option) => option.value).join('、')}`
+              : '开或关'
       throw new ApiError(400, 'invalid_setting', `${field.label}：应为${rule}`)
     }
     patch[key] = value
   }
-  return patch as Partial<RuntimeSettings>
+  return patch as Partial<RuntimeSettings & { videoProvider: VideoProviderId }>
 }
 
 async function loadStored(db: D1Database) {
@@ -126,13 +173,13 @@ async function loadStored(db: D1Database) {
   return stored
 }
 
-export async function getSettings(env: Env): Promise<RuntimeSettings> {
+export async function getSettings(env: Env): Promise<LoadedSettings> {
   let stored = await env.KV.get<Record<string, unknown>>(CACHE_KEY, { type: 'json', cacheTtl: 60 })
   if (!stored) {
     stored = await loadStored(env.DB)
     await env.KV.put(CACHE_KEY, JSON.stringify(stored))
   }
-  return mergeSettings(stored)
+  return { ...mergeSettings(stored), videoProvider: storedVideoProvider(stored, env) }
 }
 
 // 维护模式下拒绝新的生成和下单；管理员放行，便于维护期间验证
@@ -165,8 +212,8 @@ export function publicNotice(settings: RuntimeSettings) {
   }
 }
 
-async function adminView(db: D1Database) {
-  const [values, meta] = await Promise.all([
+async function adminView(db: D1Database, env: Env) {
+  const [stored, meta] = await Promise.all([
     loadStored(db),
     db
       .prepare(
@@ -174,26 +221,37 @@ async function adminView(db: D1Database) {
       )
       .all<{ key: string; updatedAt: string; updatedBy: string | null }>(),
   ])
-  return { fields: SETTING_FIELDS, values: mergeSettings(values), defaults: DEFAULT_SETTINGS, overrides: meta.results }
+  const baseline = env.VIDEO_PROVIDER ?? ''
+  const override = storedVideoProvider(stored, env)
+  return {
+    fields: settingFields(env),
+    values: { ...mergeSettings(stored), videoProvider: override ?? baseline },
+    // 渠道默认是当前环境变量，不放进静态 DEFAULT_SETTINGS
+    defaults: { ...DEFAULT_SETTINGS, videoProvider: baseline },
+    overrides: meta.results,
+  }
 }
 
 export function registerSettingsAdminRoutes(routes: Hono<AppContext>) {
   // 后台读 D1 原值，不走缓存
-  routes.get('/settings', async (c) => c.json(await adminView(c.env.DB)))
+  routes.get('/settings', async (c) => c.json(await adminView(c.env.DB, c.env)))
 
   routes.post('/settings', async (c) => {
     const admin = requireAdmin(c)
-    const patch = parseSettingsPatch((await readJson<{ values: unknown }>(c)).values)
+    const patch = parseSettingsPatch((await readJson<{ values: unknown }>(c)).values, c.env)
     const db = c.env.DB
-    const before = mergeSettings(await loadStored(db))
+    const raw = await loadStored(db)
+    const before = mergeSettings(raw)
+    const beforeVideo = storedVideoProvider(raw, c.env) ?? (c.env.VIDEO_PROVIDER ?? '')
     const now = nowIso()
     const changes: Record<string, { from: unknown; to: unknown }> = {}
     const statements: D1PreparedStatement[] = []
     for (const [key, value] of Object.entries(patch) as [SettingKey, unknown][]) {
-      if (before[key] === value) continue
-      changes[key] = { from: before[key], to: value }
+      const previous = key === 'videoProvider' ? beforeVideo : before[key]
+      if (previous === value) continue
+      changes[key] = { from: previous, to: value }
       statements.push(
-        value === DEFAULT_SETTINGS[key]
+        settingMatchesDefault(key, value, c.env)
           ? db.prepare('DELETE FROM settings WHERE key = ?').bind(key)
           : db
               .prepare(
@@ -208,6 +266,6 @@ export function registerSettingsAdminRoutes(routes: Hono<AppContext>) {
       await c.env.KV.put(CACHE_KEY, JSON.stringify(await loadStored(db)))
       await audit(c.env, admin, 'settings.update', 'settings', 'runtime', changes)
     }
-    return c.json(await adminView(db))
+    return c.json(await adminView(db, c.env))
   })
 }

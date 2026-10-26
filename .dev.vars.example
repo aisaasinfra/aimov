@@ -20,6 +20,8 @@ FAL_KEY=
 YIR_API_KEY=
 # NanoAPI 视频服务（VIDEO_PROVIDER=nanoapi 时必填；本地 mock 不需要）
 NANOAPI_API_KEY=
+# OpenGen 连接鉴权（后台切到 opengen 或 VIDEO_PROVIDER=opengen 时需要）。不是厂商 Key，厂商 Key 留在 OpenGen 主机。
+OPENGEN_API_KEY=
 # 图片审核（MODERATION_PROVIDER=openai 时必填）
 OPENAI_API_KEY=
 # Turnstile（vars.TURNSTILE_SITE_KEY 非空时必填）
