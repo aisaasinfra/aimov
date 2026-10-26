@@ -2,8 +2,9 @@ import { useRouterState } from '@tanstack/react-router'
 import { Plus, Upload } from 'lucide-react'
 import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { CaptionNameplate } from '#/components/caption-sleigh'
-import { findVideoTemplate, site, type VideoTemplate } from '#/config/site'
+import { cheapestPackageCovering, findVideoTemplate, site, type VideoTemplate } from '#/config/site'
 import { api, errorCode, isActiveGeneration, type Generation } from '#/lib/api'
+import { useCheckout } from '#/lib/checkout'
 import { track } from '#/lib/attribution'
 import { COVERFLOW_RELEASE_PX, coverflowSwipeDelta } from '#/lib/coverflow-drag'
 import { useContent, useLocale, useLocalePath } from '#/lib/i18n'
@@ -29,6 +30,12 @@ type PlayApi = {
   generation: Generation | null
   duration: (typeof site.durations)[number]
   shortfall: number
+  coverPack: ReturnType<typeof cheapestPackageCovering>
+  buyCover: () => void
+  checkoutPending: string | null
+  checkoutError: string | null
+  checkoutPaused: boolean
+  checkoutBlocked: boolean
   busy: boolean
   selectFile: (file: File | undefined) => Promise<void>
   selectDuration: (id: string) => void
@@ -61,6 +68,7 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const dropTitle = useContent().generator.dropTitle
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { user, config, loading, refresh } = useSession()
+  const checkout = useCheckout()
   const inputRef = useRef<HTMLInputElement>(null)
   const first = site.videoTemplates[0]!
   const [photo, setPhoto] = useState<Photo | null>(null)
@@ -78,7 +86,8 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   const template = findVideoTemplate(templateId) ?? first
   const duration = site.durations.find((item) => item.id === durationId) ?? site.durations[0]!
   const shortfall = user ? Math.max(0, duration.credits - user.credits) : 0
-  const busy = uploading || submitting || (generation !== null && isActiveGeneration(generation))
+  const coverPack = shortfall > 0 ? cheapestPackageCovering(shortfall) : undefined
+  const busy = uploading || submitting || checkout.pending !== null || (generation !== null && isActiveGeneration(generation))
 
   useEffect(
     () => () => {
@@ -213,6 +222,11 @@ export function PlayProvider({ children }: { children: ReactNode }) {
       return
     }
     if (plan === 'pricing') {
+      // 积分不够时直接买盖住差额的积分包。暂停收款的非管理员仍去价格页看说明。
+      if (coverPack && !checkout.paused) {
+        void checkout.buy(coverPack.id)
+        return
+      }
       location.href = lp('/pricing')
       return
     }
@@ -251,6 +265,14 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     generation,
     duration,
     shortfall,
+    coverPack,
+    buyCover: () => {
+      if (coverPack) void checkout.buy(coverPack.id)
+    },
+    checkoutPending: checkout.pending,
+    checkoutError: checkout.error,
+    checkoutPaused: checkout.checkoutPaused,
+    checkoutBlocked: checkout.paused,
     busy,
     selectFile,
     selectDuration,

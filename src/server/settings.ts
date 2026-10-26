@@ -3,6 +3,7 @@ import { LOCALES, LOCALE_META, site, type Locale } from '#/config/site'
 import { audit, readJson, requireAdmin } from './http'
 import type { AppContext, UserRow } from './types'
 import { ApiError, nowIso } from './util'
+import { dualCheckoutConfigured } from './payments'
 import { parseVideoProviderId, videoProviderOptions } from './video'
 import type { VideoProviderId } from './video/types'
 
@@ -12,6 +13,10 @@ import type { VideoProviderId } from './video/types'
 
 export type RuntimeSettings = {
   maintenance: boolean
+  checkoutPaused: boolean
+  // 只在 Waffo 与 PayPal.cn 都配齐时生效，并且只过滤新订单。默认两条都开。
+  allowWaffo: boolean
+  allowPaypal: boolean
   signupBonusCredits: number
   signupBonusValidDays: number
   referralRewardCredits: number
@@ -36,7 +41,7 @@ const VIDEO_PROVIDER_HELP =
   '新创建的工单锁定为这里的渠道，约 60 秒缓存后生效。已排队或处理中的工单继续用创建时写入的渠道。未改时与环境变量 VIDEO_PROVIDER 相同，保存成那个值会删掉覆盖。mock 只在 development / preview 出现。密钥不在这里：fal / yir / nanoapi 仍用各自 secret；OpenGen 只配 OPENGEN_BASE_URL 和 OPENGEN_API_KEY，厂商 Key 留在 OpenGen 主机。没配连接信息的渠道仍可选，提交时按失败退点。'
 
 export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
-  return [
+  const fields: SettingField[] = [
     {
       key: 'videoProvider',
       kind: 'enum',
@@ -46,6 +51,10 @@ export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
     },
     ...SETTING_FIELDS,
   ]
+  if (!dualCheckoutConfigured(env as Env)) return fields
+  const pauseAt = fields.findIndex((field) => field.key === 'checkoutPaused')
+  fields.splice(pauseAt + 1, 0, ...CHECKOUT_ALLOW_FIELDS)
+  return fields
 }
 
 export const SETTING_FIELDS: readonly SettingField[] = [
@@ -54,6 +63,12 @@ export const SETTING_FIELDS: readonly SettingField[] = [
     kind: 'bool',
     label: '维护模式',
     help: '暂停新的生成和下单（返回 503），前台每页顶部显示维护提示。登录、查看、下载和支付回调照常；管理员不受限制，便于验证',
+  },
+  {
+    key: 'checkoutPaused',
+    kind: 'bool',
+    label: '暂停收款',
+    help: '只暂停新的下单：非管理员返回 503 checkout_paused。生成、登录、下载和已有订单的支付回调照常。管理员仍可下单验证。价格页上所有人都能看到暂停说明',
   },
   ...LOCALES.map(
     (locale): SettingField => ({
@@ -86,8 +101,27 @@ export const SETTING_FIELDS: readonly SettingField[] = [
   },
 ]
 
+// 通道开关始终可存。后台只在 Waffo 和 PayPal.cn 都配齐时展示，避免单通道部署被误关。
+export const CHECKOUT_ALLOW_FIELDS: readonly SettingField[] = [
+  {
+    key: 'allowWaffo',
+    kind: 'bool',
+    label: '新订单允许 Waffo',
+    help: '关掉后新订单不能再选 Waffo。退款、查单和 webhook 仍按订单自己的支付商走。两条都关掉时新订单会失败',
+  },
+  {
+    key: 'allowPaypal',
+    kind: 'bool',
+    label: '新订单允许 PayPal.cn',
+    help: '关掉后新订单不能再选 PayPal。订阅本来就不走 PayPal。已有 PayPal 订单的退款和 webhook 不受影响',
+  },
+]
+
 export const DEFAULT_SETTINGS: RuntimeSettings = {
   maintenance: false,
+  checkoutPaused: false,
+  allowWaffo: true,
+  allowPaypal: true,
   ...(Object.fromEntries(LOCALES.map((locale) => [`announcement.${locale}`, ''])) as Record<`announcement.${Locale}`, string>),
   signupBonusCredits: site.signupBonusCredits,
   signupBonusValidDays: site.signupBonusValidDays,
@@ -127,7 +161,7 @@ export function mergeSettings(stored: Record<string, unknown>): RuntimeSettings 
   const merged: Record<string, unknown> = { ...DEFAULT_SETTINGS }
   for (const [key, value] of Object.entries(stored)) {
     // 渠道覆盖不进静态默认值，由 storedVideoProvider / resolveEffectiveVideoProvider 单独读
-    const field = SETTING_FIELDS.find((item) => item.key === key)
+    const field = [...SETTING_FIELDS, ...CHECKOUT_ALLOW_FIELDS].find((item) => item.key === key)
     if (field && isValid(field, value)) merged[key] = value
   }
   return merged as RuntimeSettings
@@ -187,6 +221,12 @@ export function assertOpen(settings: RuntimeSettings, user: UserRow) {
   if (settings.maintenance && user.role !== 'admin') throw new ApiError(503, 'maintenance')
 }
 
+// 暂停收款只拒绝新的下单。生成继续走 assertOpen。管理员仍可下单验证。
+export function assertCheckoutOpen(settings: RuntimeSettings, user: UserRow) {
+  assertOpen(settings, user)
+  if (settings.checkoutPaused && user.role !== 'admin') throw new ApiError(503, 'checkout_paused')
+}
+
 export const referralActive = (settings: RuntimeSettings) => settings.referralRewardCredits > 0
 
 // 全站每日生成上限（UTC 自然日）。预检查只为尽早拒绝；并发提交由 batch 里的断言兜底，超出时整个 batch 回滚
@@ -208,6 +248,7 @@ export function dailyCapGuard(db: D1Database, cap: number, now: string) {
 export function publicNotice(settings: RuntimeSettings) {
   return {
     maintenance: settings.maintenance,
+    checkoutPaused: settings.checkoutPaused,
     announcement: Object.fromEntries(LOCALES.map((locale) => [locale, settings[`announcement.${locale}`]])) as Record<Locale, string>,
   }
 }

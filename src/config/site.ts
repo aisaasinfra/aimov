@@ -93,8 +93,10 @@ export const site = {
     { id: 'full', seconds: 18, credits: 18, source: 'neon-shuffle-v1-18s.mp4', isFull: true },
   ],
 
-  // 首页可选的圣诞世界。海报是 Merry Us 3D 静帧；Merry Us 没有逐城 MP4，所以不挂预览视频。
-  // 时长和计费仍走 durations（6/12/18），和世界分开选。成片仍走现有视频管线，prompt 描述所选世界。
+  // 首页可选的圣诞世界。海报是 Merry Us 3D 静帧；Merry Us 没有逐城 MP4，所以不挂预览视频，也不要填还不存在的文件名。
+  // 某个世界有了真实源视频之后，可以加 sources: { short, medium, full }，值是 R2 templates/ 下的 MP4 文件名。
+  // 没有 sources 时 jobs 回退到 durations[].source（现在三段都是同一套 neon）。yir 仍会把世界文案接进 prompt。
+  // 时长和计费仍走 durations（6/12/18），和世界分开选。
   videoTemplates: [
     {
       id: 'new-york',
@@ -269,7 +271,11 @@ export const site = {
 } as const
 
 export type DurationOption = (typeof site.durations)[number]
-export type VideoTemplate = (typeof site.videoTemplates)[number]
+// sources：这一世界、这一时长自己的源 MP4。缺省时用 durations[].source。不要在素材还没上传时填写。
+export type WorldSourceMap = Partial<Record<DurationOption['id'], string>>
+export type VideoTemplate = (typeof site.videoTemplates)[number] & {
+  sources?: WorldSourceMap
+}
 export type CreditPackage = (typeof site.packages)[number]
 
 export interface YirSceneConfig {
@@ -296,8 +302,18 @@ export function findDuration(id: string) {
   return site.durations.find((d) => d.id === id)
 }
 
-export function findVideoTemplate(id: string) {
+export function findVideoTemplate(id: string): VideoTemplate | undefined {
   return site.videoTemplates.find((template) => template.id === id)
+}
+
+// 世界声明了这一时长的源文件就用它；空字符串和缺省都回退到时长档位上的共享源视频。
+export function templateSourceFile(
+  template: { sources?: Partial<Record<string, string>> } | null | undefined,
+  duration: { id: string; source: string },
+) {
+  const named = template?.sources?.[duration.id]
+  if (typeof named === 'string' && named.trim()) return named.trim()
+  return duration.source
 }
 
 // promptZh 是繁体（zh-TW / zh-HK / zh-Hant）。简体标签（zh-CN、zh-Hans、zh-SG）和光秃的 zh 用英文 prompt，避免把已下线的简体当成首选。
@@ -318,6 +334,11 @@ export function usesTraditionalPrompt(locale: string | undefined) {
 
 export function findPackage(id: string) {
   return site.packages.find((p) => p.id === id)
+}
+
+// 积分 ≥ shortfall 的积分包里最便宜的一个（只看一次性积分包，不含订阅）；没有够用的返回 undefined
+export function cheapestPackageCovering(shortfall: number): CreditPackage | undefined {
+  return site.packages.filter((pack) => pack.credits >= shortfall).sort((a, b) => a.priceCents - b.priceCents)[0]
 }
 
 // 在售的订阅套餐：开关关掉时为空。处理已有订阅（续费、退款、账单页）用 findPlan，不受开关影响

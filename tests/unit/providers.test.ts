@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activePaymentProviderId, checkoutChannels, resolveCheckoutChannel } from '#/server/payments'
+import { activePaymentProviderId, checkoutChannels, getOrderProvider, resolveCheckoutChannel } from '#/server/payments'
 import { activeVideoProviderId, getVideoProvider, resolveEffectiveVideoProvider } from '#/server/video'
 
 // mock 支付/生成在生产环境必须不可用，否则任何人都能免费充值
@@ -66,5 +66,31 @@ describe('provider 选择', () => {
     const paypalOnly = env({ APP_ENV: 'production', PAYMENT_PROVIDER: 'paypal', PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 'secret' })
     expect(resolveCheckoutChannel(paypalOnly, undefined, 'starter')).toBe('paypal')
     expect(() => resolveCheckoutChannel(paypalOnly, undefined, 'monthly')).toThrow(expect.objectContaining({ code: 'paypal_packs_only' }))
+  })
+
+  it('两条都配齐时按 allow 过滤新订单；旧订单仍按订单支付商', () => {
+    const both = env({
+      APP_ENV: 'production',
+      PAYMENT_PROVIDER: 'waffo',
+      WAFFO_MERCHANT_ID: 'm',
+      WAFFO_PRIVATE_KEY: 'k',
+      PAYPAL_CLIENT_ID: 'id',
+      PAYPAL_CLIENT_SECRET: 'secret',
+    })
+    expect(checkoutChannels(both, { allowWaffo: false })).toEqual(['paypal'])
+    expect(checkoutChannels(both, { allowPaypal: false })).toEqual(['waffo'])
+    expect(checkoutChannels(both, { allowWaffo: false, allowPaypal: false })).toEqual([])
+    expect(checkoutChannels(both)).toEqual(['waffo', 'paypal'])
+    expect(() => resolveCheckoutChannel(both, 'waffo', 'starter', { allowWaffo: false })).toThrow(expect.objectContaining({ code: 'invalid_channel' }))
+    expect(resolveCheckoutChannel(both, undefined, 'starter', { allowPaypal: false })).toBe('waffo')
+    expect(resolveCheckoutChannel(both, undefined, 'starter', { allowWaffo: false })).toBe('paypal')
+    expect(() => resolveCheckoutChannel(both, 'paypal', 'starter', { allowWaffo: false, allowPaypal: false })).toThrow(
+      expect.objectContaining({ code: 'payment_not_configured' }),
+    )
+    expect(getOrderProvider(both, 'paypal')?.id).toBe('paypal')
+    expect(getOrderProvider(both, 'waffo')?.id).toBe('waffo')
+
+    const waffoOnly = env({ APP_ENV: 'production', PAYMENT_PROVIDER: 'waffo', WAFFO_MERCHANT_ID: 'm', WAFFO_PRIVATE_KEY: 'k' })
+    expect(checkoutChannels(waffoOnly, { allowWaffo: false })).toEqual(['waffo'])
   })
 })

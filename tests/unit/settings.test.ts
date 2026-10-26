@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { site } from '#/config/site'
-import { DEFAULT_SETTINGS, dailyCapGuard, generationsToday, getSettings, mergeSettings, parseSettingsPatch, settingMatchesDefault, storedVideoProvider } from '#/server/settings'
+import { DEFAULT_SETTINGS, assertCheckoutOpen, assertOpen, dailyCapGuard, generationsToday, getSettings, mergeSettings, parseSettingsPatch, settingFields, settingMatchesDefault, storedVideoProvider } from '#/server/settings'
+import type { UserRow } from '#/server/types'
 import { resolveEffectiveVideoProvider } from '#/server/video'
 import { ApiError } from '#/server/util'
 import { type Stmt, d1Shim, kvShim, migrate } from './d1-sqlite'
@@ -57,6 +58,39 @@ describe('后台提交的运营参数', () => {
   it('邀请奖励的上限跟随 site.ts：site.ts 关闭邀请时只能是 0', () => {
     if (site.referralRewardCredits > 0) expect(parseSettingsPatch({ referralRewardCredits: 1000 })).toEqual({ referralRewardCredits: 1000 })
     else expect(invalid({ referralRewardCredits: 1 })).toContain('邀请奖励积分')
+  })
+
+  it('暂停收款可保存；通道开关只在两条都配齐时出现，但存值始终能合并', () => {
+    expect(parseSettingsPatch({ checkoutPaused: true })).toEqual({ checkoutPaused: true })
+    expect(invalid({ allowPaypal: false })).toContain('allowPaypal')
+    const both = {
+      APP_ENV: 'production',
+      PAYMENT_PROVIDER: 'waffo',
+      WAFFO_MERCHANT_ID: 'm',
+      WAFFO_PRIVATE_KEY: 'k',
+      PAYPAL_CLIENT_ID: 'id',
+      PAYPAL_CLIENT_SECRET: 'secret',
+    }
+    const keys = settingFields(both).map((field) => field.key)
+    expect(keys.indexOf('allowWaffo')).toBe(keys.indexOf('checkoutPaused') + 1)
+    expect(keys).toContain('allowPaypal')
+    expect(settingFields({ APP_ENV: 'production' }).some((field) => field.key === 'allowPaypal')).toBe(false)
+    expect(parseSettingsPatch({ allowPaypal: false, allowWaffo: true }, both)).toEqual({ allowPaypal: false, allowWaffo: true })
+    expect(mergeSettings({ allowPaypal: false, checkoutPaused: true })).toMatchObject({ allowPaypal: false, checkoutPaused: true, allowWaffo: true })
+  })
+})
+
+describe('暂停收款', () => {
+  const user = { role: 'user' } as UserRow
+  const admin = { role: 'admin' } as UserRow
+
+  it('非管理员 503 checkout_paused；管理员仍可下单；生成检查不看这个开关', () => {
+    const paused = { ...DEFAULT_SETTINGS, checkoutPaused: true }
+    expect(() => assertCheckoutOpen(paused, user)).toThrow(expect.objectContaining({ status: 503, code: 'checkout_paused' }))
+    expect(() => assertCheckoutOpen(paused, admin)).not.toThrow()
+    expect(() => assertOpen(paused, user)).not.toThrow()
+    expect(() => assertCheckoutOpen({ ...DEFAULT_SETTINGS, maintenance: true }, user)).toThrow(expect.objectContaining({ status: 503, code: 'maintenance' }))
+    expect(() => assertCheckoutOpen(DEFAULT_SETTINGS, user)).not.toThrow()
   })
 })
 

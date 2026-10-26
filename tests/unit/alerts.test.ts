@@ -12,6 +12,7 @@ function stats(overrides: Partial<HealthStats> = {}): HealthStats {
     webhookFailures: { count: 0, latest: null },
     paymentReview: { count: 0, latest: null },
     emailFailures: 2,
+    providerBalance: null,
     ...overrides,
   }
 }
@@ -50,6 +51,13 @@ describe('evaluateHealth', () => {
     const webhook = evaluateHealth(stats({ webhookFailures: { count: 2, latest: 'dodo payment.succeeded: boom' } }))[0]
     expect(webhook).toMatchObject({ kind: 'payment_webhook', count: 2, detail: 'dodo payment.succeeded: boom' })
   })
+
+  it('余额低于 10 美元告警；没有余额（OpenGen）不告警', () => {
+    const low = evaluateHealth(stats({ providerBalance: { provider: 'fal', amount: 9.5, currency: 'USD' } }))
+    expect(low).toEqual([{ kind: 'provider_balance', count: 1, total: null, windowMinutes: 60, detail: 'fal 余额 9.50 USD' }])
+    expect(kinds(stats({ providerBalance: { provider: 'yir', amount: 10, currency: 'USD' } }))).not.toContain('provider_balance')
+    expect(evaluateHealth(stats())).toEqual([])
+  })
 })
 
 describe('alertBucket', () => {
@@ -76,5 +84,14 @@ describe('admin_alert 邮件', () => {
     const webhook = renderEmail('admin_alert', { kind: 'payment_webhook', count: 1, total: null, windowMinutes: 1440, detail: null }, ctx)
     expect(webhook.text).toContain('https://example.test/admin/events')
     expect(webhook.text).not.toContain('详情')
+
+    const balance = renderEmail(
+      'admin_alert',
+      { kind: 'provider_balance', count: 1, total: null, windowMinutes: 60, detail: 'fal 余额 9.50 USD' },
+      ctx,
+    )
+    expect(balance.subject).toContain('视频服务商余额不足')
+    expect(balance.text).toContain('fal 余额 9.50 USD')
+    expect(balance.text).toContain('https://example.test/admin/generations')
   })
 })
