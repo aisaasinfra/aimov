@@ -178,6 +178,37 @@ describe('OpenGen 推送', () => {
     expect((error as VideoProviderError).message).not.toContain('og_secret_key_123')
   })
 
+  it('上游 error.code 或 status 回显连接密钥时，失败码和说明都不带出', async () => {
+    const provider = createOpenGenProvider(env())
+    const secret = 'og_secret_key_123'
+    stubFetch(() => json(200, { id: 'job_1', status: 'failed', error: { code: secret, message: 'rejected' } }))
+    const failed = await provider.status('job_1', {})
+    expect(failed).toMatchObject({ state: 'failed', code: 'opengen_failed', message: 'rejected' })
+    expect(JSON.stringify(failed)).not.toContain(secret)
+
+    stubFetch(() => json(200, { id: 'job_1', status: secret }))
+    const weird = await provider.status('job_1', {})
+    expect(weird).toMatchObject({ state: 'failed', code: 'opengen_failed' })
+    expect(JSON.stringify(weird)).not.toContain(secret)
+    expect(JSON.stringify(weird)).toContain('***')
+
+    stubFetch(() => json(502, { error: { code: secret, message: `down ${secret}` } }))
+    const http = (await provider.submit(input()).catch((caught: unknown) => caught)) as VideoProviderError
+    expect(http).toMatchObject({ code: 'opengen_submit_502', retryable: true })
+    expect(http.message).not.toContain(secret)
+    expect(http.code).not.toContain(secret)
+  })
+
+  it('说明超过 300 字时仍先抹掉末尾的连接密钥', async () => {
+    const secret = 'og_secret_key_123'
+    stubFetch(() => json(200, { id: 'job_1', status: 'failed', error: { code: 'og_bad', message: `${'x'.repeat(290)}${secret}` } }))
+    const failed = await createOpenGenProvider(env()).status('job_1', {})
+    expect(failed).toMatchObject({ state: 'failed', code: 'og_bad' })
+    expect(JSON.stringify(failed)).not.toContain(secret)
+    expect(JSON.stringify(failed)).not.toContain('og_secret')
+    expect(JSON.stringify(failed)).toContain('***')
+  })
+
   it('成本估算为 0：回传的 cost_cents 才是实际成本，不向用户再记一笔', () => {
     expect(createOpenGenProvider(env()).costCents(18)).toBe(0)
   })

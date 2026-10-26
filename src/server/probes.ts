@@ -195,6 +195,19 @@ async function probeOpenGen(env: Env): Promise<Outcome> {
   return ok('鉴权正常，OpenGen 端点可达')
 }
 
+function probeFailure(error: unknown) {
+  return fail(error instanceof Error ? error.message : String(error))
+}
+
+// 解析和探测分开捕获：网络错误发生时，标签仍是已经解析出的渠道，不能退回 env 默认值。
+async function probeResolved(env: Env, id: VideoProviderId): Promise<{ label: string; outcome: Outcome }> {
+  try {
+    return { label: id, outcome: await probeVideo(env, id) }
+  } catch (error) {
+    return { label: id, outcome: probeFailure(error) }
+  }
+}
+
 // 与创建工单同一次解析。options.provider 指定单次探测目标；否则运行时覆盖优先，再回退 env.VIDEO_PROVIDER。
 async function resolveVideoProbe(
   env: Env,
@@ -202,18 +215,16 @@ async function resolveVideoProbe(
 ): Promise<{ label: string; outcome: Outcome }> {
   if (options?.provider) {
     try {
-      const id = parseVideoProviderId(options.provider, env)
-      return { label: id, outcome: await probeVideo(env, id) }
+      return await probeResolved(env, parseVideoProviderId(options.provider, env))
     } catch (error) {
-      return { label: options.provider, outcome: fail(error instanceof Error ? error.message : String(error)) }
+      return { label: options.provider, outcome: probeFailure(error) }
     }
   }
   const settings = options?.settings ?? (await loadVideoSettings(env))
   try {
-    const id = resolveEffectiveVideoProvider(env, settings)
-    return { label: id, outcome: await probeVideo(env, id) }
+    return await probeResolved(env, resolveEffectiveVideoProvider(env, settings))
   } catch (error) {
-    return { label: env.VIDEO_PROVIDER || '(未配置)', outcome: fail(error instanceof Error ? error.message : String(error)) }
+    return { label: env.VIDEO_PROVIDER || '(未配置)', outcome: probeFailure(error) }
   }
 }
 
