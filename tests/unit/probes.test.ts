@@ -211,6 +211,28 @@ describe('视频服务商探测', () => {
     expect(result.message).toBe('connect failed for Key *** (OPENAI ***)')
   })
 
+  it('env 是 fal、运行时是 opengen：健康检查抛错时标签仍是 opengen，且说明不含密钥', async () => {
+    const secret = 'og_secret_key_123'
+    vi.stubGlobal('fetch', async () => {
+      throw new Error(`network down ${secret}`)
+    })
+    const result = await runProbe(
+      {
+        VIDEO_PROVIDER: 'fal',
+        APP_ENV: 'development',
+        OPENGEN_BASE_URL: 'https://og.example',
+        OPENGEN_API_KEY: secret,
+        OPENGEN_STUB: '0',
+      } as unknown as Env,
+      'video',
+      admin,
+      { settings: { videoProvider: 'opengen' } },
+    )
+    expect(result).toMatchObject({ status: 'fail', provider: 'opengen' })
+    expect(result.message).not.toContain(secret)
+    expect(result.message).toContain('***')
+  })
+
   it('env 是 fal、运行时是 yir：探测跟运行时，标签是 yir', async () => {
     const calls = stubFetch({ 'gateway.yir.ai/v1/balance': { body: { available_amount: 20, currency: 'USD' } } })
     const result = await runProbe({ VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', YIR_API_KEY: 'yir_key_abcdefgh', APP_ENV: 'development' } as unknown as Env, 'video', admin, {

@@ -97,7 +97,7 @@ export function createOpenGenProvider(env: Env): VideoProvider {
       const response = await request(config, `${JOBS_PATH}/${encodeURIComponent(requestId)}`)
       const body = await readJob(response, config.apiKey)
       if (!response.ok || !body) throw httpError('status', response, body, config.apiKey)
-      return mapStatus(body)
+      return mapStatus(body, config.apiKey)
     },
 
     costCents(durationSeconds) {
@@ -141,7 +141,7 @@ async function readJob(response: Response, apiKey: string): Promise<OpenGenJob |
   return body
 }
 
-function mapStatus(body: OpenGenJob): VideoStatus {
+function mapStatus(body: OpenGenJob, apiKey: string): VideoStatus {
   const status = (body.status ?? '').toLowerCase()
   if (status === 'queued' || status === 'processing' || status === 'running' || status === 'pending' || status === '') {
     return { state: 'pending' }
@@ -155,23 +155,38 @@ function mapStatus(body: OpenGenJob): VideoStatus {
       ...(typeof cost === 'number' && Number.isFinite(cost) ? { costCents: Math.round(cost) } : {}),
     }
   }
-  const code = body.error?.code || 'opengen_failed'
-  const message = scrub(body.error?.message || `OpenGen 任务失败（${body.status ?? 'unknown'}）`, undefined)
+  const code = safeCode(body.error?.code, 'opengen_failed', apiKey)
+  const message = scrub(body.error?.message || `OpenGen 任务失败（${body.status ?? 'unknown'}）`, apiKey)
   if (body.error?.retryable) throw new VideoProviderError(code, message, true)
   return { state: 'failed', code, message }
 }
 
 function httpError(stage: string, response: Response, body: OpenGenJob | null, apiKey: string) {
-  const code = response.status === 401 || response.status === 403 ? 'opengen_unauthorized' : (body?.error?.code ?? `opengen_${stage}_${response.status}`)
+  const fallback = `opengen_${stage}_${response.status}`
+  const code = response.status === 401 || response.status === 403 ? 'opengen_unauthorized' : safeCode(body?.error?.code, fallback, apiKey)
   const detail = body?.error?.message ?? ''
   const retryable = body?.error?.retryable ?? (response.status === 408 || response.status === 429 || response.status >= 500)
   return new VideoProviderError(code, scrub(`OpenGen ${stage} 失败（HTTP ${response.status}）${detail ? `：${detail}` : ''}`, apiKey), retryable && code !== 'opengen_unauthorized')
 }
 
+// 上游 code 原样进工单 error_code，再经 publicGeneration 回到用户。只保留短 token，并且不能含连接密钥。
+const SAFE_UPSTREAM_CODE = /^[A-Za-z0-9_.:-]{1,80}$/
+
+function safeCode(raw: string | undefined, fallback: string, secret: string | undefined) {
+  const code = raw?.trim() ?? ''
+  if (!SAFE_UPSTREAM_CODE.test(code)) return fallback
+  if (secret && secret.length > 0 && (code.includes(secret) || code.includes(encodeURIComponent(secret)))) return fallback
+  return code
+}
+
 function scrub(message: string, secret: string | undefined) {
-  let out = message.replace(/\s+/g, ' ').trim().slice(0, 300)
-  if (secret && secret.length >= 8) out = out.split(secret).join('***')
-  return out
+  let out = message
+  if (secret && secret.length >= 8) {
+    out = out.split(secret).join('***')
+    const encoded = encodeURIComponent(secret)
+    if (encoded !== secret) out = out.split(encoded).join('***')
+  }
+  return out.replace(/\s+/g, ' ').trim().slice(0, 300)
 }
 
 // 联调 stub：同一 generation ID 永远得到同一个 requestId（复用，不产生第二笔任务）。成功时把模板源视频当作成片，和 mock 一样由 jobs 复制进 R2。
