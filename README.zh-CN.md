@@ -262,6 +262,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - 退款事件先于付款事件到达（付款回调还在重试）时记为失败并返回 5xx，等付款入账后由支付商重试。
   - webhook 丢失或迟到时主动向支付商查单（`src/server/reconcile.ts`；Dodo 查 checkout session 再取 payment，Stripe 查 checkout session（带账单行和账单），Waffo 用 GraphQL `payments` 按商户订单号查）：成功页在约 15 秒和 60 秒时各查一次；5 分钟 Cron 查创建 10 分钟到 24 小时之间的 pending 订单，指数退避（约 10、20、40……分钟，每轮最多 10 单）；后台订单详情有“查单”按钮，补单前先用。查到的付款和 webhook 走同一套核对与幂等键，迟到的 webhook 不会重复入账。浏览器只能传订单号，不能传付款状态。已有 `mismatch` 事件的订单留给人工核对。
 - **生成**：先扣积分再入队，失败、超时或管理员判失败时自动退回。视频服务商的 webhook 和定时轮询可能同时处理同一个任务，只有一路能把任务置为成功，另一路不会删掉已落库的成片。
+- **履行**：站点设置 `fulfillmentMode` 为 `manual`（没存过时默认）或 `auto`。可选 `fulfillmentModeByTemplate`，JSON，模板 id → `manual` | `auto`。`auto` 就是上面的入队路径。`manual` 仍扣积分并写入 `generations`（`provider=manual`、`status=queued`），不调厂商、不进 `VIDEO_QUEUE`；往 Google Sheet 追加一行（服务账号，密钥见 [docs/env.md](docs/env.md)），并邮件通知已进入队列。Sheet 写失败只记在该行的 `provider_meta.sheetError`。后台可列出人工单，粘贴成品 `https` 地址（按厂商成片同样转存 R2），或用现有账本标记失败并退积分。收款不变。
 - **成片分享**：用户在个人中心对自己的成片点“分享”，生成公开链接 `/v/<随机串>`（16 位，不可枚举，带语言前缀如 `/zh-TW/v/…` 同样可用）。默认开启；`site.share.enabled` 设为 `false` 时按钮和页面都不出现，换脸、真人类站点建议关闭。
   - 分享页只有视频、AI 角标与声明、“我也做一条”按钮和举报入口，不显示作者信息，HTML 和接口里也没有视频 ID。响应头和 meta 都是 `noindex`，不进 sitemap。
   - 链接预览：开启分享时浏览器从成片截一帧，画成 1200×630 的 JPEG（左上角带 AI 标识）一起上传，作为 `og:image`，成片地址写进 `og:video`。封面和上传照片一样过图片审核（不通过返回 422 `share_rejected`）；截帧失败（浏览器解码不了、超时）时不带封面，用站点默认 OG 图。

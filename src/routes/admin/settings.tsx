@@ -11,7 +11,7 @@ export const Route = createFileRoute('/admin/settings')({
 type Field =
   | { key: string; kind: 'bool'; label: string; help: string }
   | { key: string; kind: 'int'; label: string; help: string; min: number; max: number }
-  | { key: string; kind: 'text'; label: string; help: string; maxLength: number }
+  | { key: string; kind: 'text'; label: string; help: string; maxLength: number; multiline?: boolean }
   | { key: string; kind: 'enum'; label: string; help: string; options: { value: string; label: string }[] }
 type Value = boolean | number | string
 type Data = {
@@ -117,6 +117,17 @@ function AdminSettings() {
                           </option>
                         ))}
                       </select>
+                    </label>
+                  ) : field.kind === 'text' && field.multiline ? (
+                    <label className="block space-y-1">
+                      <span className="font-medium">{field.label}</span>
+                      <textarea
+                        className="input min-h-28 font-mono text-xs"
+                        maxLength={field.maxLength}
+                        value={String(value ?? '')}
+                        onChange={(e) => setForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                        data-testid={`setting-${field.key}`}
+                      />
                     </label>
                   ) : (
                     <label className="block space-y-1">

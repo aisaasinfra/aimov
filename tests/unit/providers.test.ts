@@ -36,6 +36,9 @@ describe('provider 选择', () => {
     expect(() => resolveEffectiveVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), { videoProvider: 'mock' })).toThrow(/VIDEO_PROVIDER/)
     expect(getVideoProvider(env({ APP_ENV: 'development', OPENGEN_STUB: '1' }), 'opengen').id).toBe('opengen')
     expect(() => getVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), 'mock')).toThrow(/video provider/)
+    expect(() => getVideoProvider(env({ APP_ENV: 'development', VIDEO_PROVIDER: 'mock' }), 'manual')).toThrow(/fulfillment mode/)
+    expect(() => resolveEffectiveVideoProvider(env({ APP_ENV: 'development', VIDEO_PROVIDER: 'manual' }), { videoProvider: null })).toThrow(/fulfillment mode/)
+    expect(() => resolveEffectiveVideoProvider(env({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal' }), { videoProvider: 'manual' })).toThrow(/fulfillment mode/)
   })
 
   it('本地 mock 忽略残留的 PayPal 密钥；Waffo 默认，PayPal 只卖积分包', () => {

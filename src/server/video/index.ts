@@ -2,7 +2,7 @@ import { ApiError, isProduction } from '../util'
 import { createFalProvider } from './fal'
 import { createNanoapiProvider } from './nanoapi'
 import { createOpenGenProvider } from './opengen'
-import type { VideoProvider, VideoProviderId } from './types'
+import { isManualProvider, type ExecutableVideoProviderId, type VideoProvider } from './types'
 import { createYirProvider } from './yir'
 
 // mock：本地与 e2e 用。几秒后“完成”，输出直接复制该时长档位的模板源视频。
@@ -27,8 +27,8 @@ function createMockProvider(): VideoProvider {
 
 const REAL_VIDEO_PROVIDERS = ['fal', 'yir', 'nanoapi', 'opengen'] as const
 
-export function videoProviderOptions(env: { APP_ENV?: string }): { value: VideoProviderId; label: string }[] {
-  const options: { value: VideoProviderId; label: string }[] = [
+export function videoProviderOptions(env: { APP_ENV?: string }): { value: ExecutableVideoProviderId; label: string }[] {
+  const options: { value: ExecutableVideoProviderId; label: string }[] = [
     { value: 'fal', label: 'fal' },
     { value: 'yir', label: 'yir' },
     { value: 'nanoapi', label: 'nanoapi' },
@@ -38,25 +38,30 @@ export function videoProviderOptions(env: { APP_ENV?: string }): { value: VideoP
   return options
 }
 
-export function parseVideoProviderId(value: string, env: { APP_ENV?: string }): VideoProviderId {
-  if ((REAL_VIDEO_PROVIDERS as readonly string[]).includes(value)) return value as VideoProviderId
+export function parseVideoProviderId(value: string, env: { APP_ENV?: string }): ExecutableVideoProviderId {
+  if (isManualProvider(value)) {
+    throw new ApiError(503, 'video_not_configured', 'manual is a fulfillment mode, not VIDEO_PROVIDER')
+  }
+  if ((REAL_VIDEO_PROVIDERS as readonly string[]).includes(value)) return value as ExecutableVideoProviderId
   if (value === 'mock' && !isProduction(env)) return 'mock'
   throw new ApiError(503, 'video_not_configured', `Unsupported VIDEO_PROVIDER: ${value || '(空)'}`)
 }
 
 // 创建工单和视频探测共用：运行时覆盖优先，否则该请求的 env.VIDEO_PROVIDER。
 // settings.videoProvider 为 null / 空表示没有合法覆盖。mock 在 isProduction 时不是合法覆盖，调用方应先丢掉。
-export function resolveEffectiveVideoProvider(env: Env, settings?: { videoProvider?: string | null } | null): VideoProviderId {
+export function resolveEffectiveVideoProvider(env: Env, settings?: { videoProvider?: string | null } | null): ExecutableVideoProviderId {
   const override = settings?.videoProvider
   const raw = typeof override === 'string' && override ? override : (env.VIDEO_PROVIDER ?? '')
   return parseVideoProviderId(raw, env)
 }
 
-export function activeVideoProviderId(env: Env, settings?: { videoProvider?: string | null } | null): VideoProviderId {
+export function activeVideoProviderId(env: Env, settings?: { videoProvider?: string | null } | null): ExecutableVideoProviderId {
   return resolveEffectiveVideoProvider(env, settings)
 }
 
 export function getVideoProvider(env: Env, id: string = activeVideoProviderId(env)): VideoProvider {
+  // 人工单没有厂商实现。调用方应先跳过；这里拒绝，避免队列误提交。
+  if (isManualProvider(id)) throw new ApiError(503, 'video_not_configured', 'manual is a fulfillment mode, not a video provider')
   if (id === 'fal') return createFalProvider(env)
   if (id === 'yir') return createYirProvider(env)
   if (id === 'nanoapi') return createNanoapiProvider(env)

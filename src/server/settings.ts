@@ -4,6 +4,7 @@ import { audit, readJson, requireAdmin } from './http'
 import type { AppContext, UserRow } from './types'
 import { ApiError, nowIso } from './util'
 import { dualCheckoutConfigured } from './payments'
+import { parseFulfillmentModeMap, type FulfillmentMode } from './fulfillment-mode'
 import { parseVideoProviderId, videoProviderOptions } from './video'
 import type { VideoProviderId } from './video/types'
 
@@ -21,6 +22,10 @@ export type RuntimeSettings = {
   signupBonusValidDays: number
   referralRewardCredits: number
   generationDailyCap: number
+  // 未写入数据库时是 manual。auto 才走现有视频渠道入队。
+  fulfillmentMode: FulfillmentMode
+  // JSON 文本：{ "<templateId>": "manual" | "auto" }。空字符串表示没有按模板覆盖。
+  fulfillmentModeByTemplate: string
 } & Record<`announcement.${Locale}`, string>
 
 // videoProvider 不在 RuntimeSettings 里：它的默认值是当前 env.VIDEO_PROVIDER，不能写进静态 DEFAULT_SETTINGS。
@@ -32,7 +37,7 @@ type FieldBase = { key: SettingKey; label: string; help: string }
 export type SettingField =
   | (FieldBase & { kind: 'bool' })
   | (FieldBase & { kind: 'int'; min: number; max: number })
-  | (FieldBase & { kind: 'text'; maxLength: number })
+  | (FieldBase & { kind: 'text'; maxLength: number; multiline?: boolean })
   | (FieldBase & { kind: 'enum'; options: readonly { value: string; label: string }[] })
 
 const referralOn = site.referralRewardCredits > 0
@@ -57,7 +62,27 @@ export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
   return fields
 }
 
+const FULFILLMENT_MODE_OPTIONS = [
+  { value: 'manual', label: '人工队列（Google Sheet）' },
+  { value: 'auto', label: '自动生成（当前视频渠道）' },
+] as const
+
 export const SETTING_FIELDS: readonly SettingField[] = [
+  {
+    key: 'fulfillmentMode',
+    kind: 'enum',
+    label: '生成履行方式',
+    help: '新任务按这个走。manual：扣积分后进入人工队列，不调用视频服务商、不进 VIDEO_QUEUE。auto：沿用上面的视频渠道并入队。没存过时默认 manual。约 60 秒后只影响新任务。不改变 Waffo / PayPal 收款。',
+    options: FULFILLMENT_MODE_OPTIONS,
+  },
+  {
+    key: 'fulfillmentModeByTemplate',
+    kind: 'text',
+    multiline: true,
+    maxLength: 4000,
+    label: '按模板覆盖履行方式',
+    help: '可选 JSON。键是模板 id，值只能是 manual 或 auto。没写到的模板用上面的站点默认。例：{"new-york":"auto"}。留空表示全部跟站点默认。',
+  },
   {
     key: 'maintenance',
     kind: 'bool',
@@ -127,6 +152,8 @@ export const DEFAULT_SETTINGS: RuntimeSettings = {
   signupBonusValidDays: site.signupBonusValidDays,
   referralRewardCredits: site.referralRewardCredits,
   generationDailyCap: 0,
+  fulfillmentMode: 'manual',
+  fulfillmentModeByTemplate: '',
 }
 
 const CACHE_KEY = 'settings:v1'
@@ -136,7 +163,9 @@ function isValid(field: SettingField, value: unknown) {
   if (field.kind === 'bool') return typeof value === 'boolean'
   if (field.kind === 'int') return Number.isInteger(value) && (value as number) >= field.min && (value as number) <= field.max
   if (field.kind === 'enum') return typeof value === 'string' && field.options.some((option) => option.value === value)
-  return typeof value === 'string' && value.length <= field.maxLength
+  if (typeof value !== 'string' || value.length > field.maxLength) return false
+  if (field.key === 'fulfillmentModeByTemplate') return parseFulfillmentModeMap(value) !== null
+  return true
 }
 
 // 存值等于这条渠道的环境变量默认时删覆盖行。其它字段仍对照静态 DEFAULT_SETTINGS。
@@ -179,6 +208,9 @@ export function parseSettingsPatch(input: unknown, env: { APP_ENV?: string } = {
     // 公告只存一行纯文本
     const value = field.kind === 'text' && typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : raw
     if (!isValid(field, value)) {
+      if (field.key === 'fulfillmentModeByTemplate') {
+        throw new ApiError(400, 'invalid_setting', `${field.label}：应为 JSON 对象，键是模板 id，值只能是 manual 或 auto`)
+      }
       const rule =
         field.kind === 'int'
           ? `${field.min}–${field.max} 的整数`

@@ -4,6 +4,7 @@ import { REQUIRED_BINDINGS, checkConfig } from './config-health'
 import { ledgerStatements } from './credits'
 import { emailConfig, retryEmail } from './email'
 import { audit, pageParams, publicGeneration, readJson, requireAdmin } from './http'
+import { completeManualGeneration, retryManualSheet, syncManualSheet } from './fulfillment'
 import { failGeneration } from './jobs'
 import { serveR2Object } from './media'
 import { assertProviderRefundAllowed, localRefundKey, refundOrder } from './orders'
@@ -432,6 +433,11 @@ adminRoutes.get('/generations', async (c) => {
     where.push('(g.id = ? OR g.provider_request_id = ? OR u.email LIKE ?)')
     params.push(q, q, `%${q.toLowerCase()}%`)
   }
+  const provider = (c.req.query('provider') ?? '').trim()
+  if (provider) {
+    where.push('g.provider = ?')
+    params.push(provider)
+  }
   const db = c.env.DB
   const [rows, perCreditRow] = await db.batch([
     db
@@ -455,8 +461,34 @@ adminRoutes.get('/generations/:id/video', async (c) => {
 adminRoutes.post('/generations/:id/fail', async (c) => {
   const admin = requireAdmin(c)
   const id = c.req.param('id')
+  const before = await c.env.DB.prepare('SELECT provider FROM generations WHERE id = ?').bind(id).first<{ provider: string }>()
   await failGeneration(c.env, id, 'admin_failed', 'Marked failed by admin')
   await audit(c.env, admin, 'generation.fail', 'generation', id)
+  if (before?.provider === 'manual') await syncManualSheet(c.env, id, { status: 'failed', resultLink: '' })
+  return c.json({ ok: true })
+})
+
+// 人工队列：把成品 https 地址拉进 R2 并标成功。退积分仍走上面的 fail。
+adminRoutes.post('/generations/:id/complete', async (c) => {
+  const admin = requireAdmin(c)
+  const id = c.req.param('id')
+  const resultUrl = (await readJson<{ resultUrl?: string }>(c)).resultUrl ?? ''
+  await completeManualGeneration(c.env, id, resultUrl)
+  let host: string | null = null
+  try {
+    host = new URL(resultUrl).host
+  } catch {
+    host = null
+  }
+  await audit(c.env, admin, 'generation.complete', 'generation', id, { resultHost: host })
+  return c.json({ ok: true })
+})
+
+adminRoutes.post('/generations/:id/sheet', async (c) => {
+  const admin = requireAdmin(c)
+  const id = c.req.param('id')
+  await retryManualSheet(c.env, id)
+  await audit(c.env, admin, 'generation.sheet_sync', 'generation', id)
   return c.json({ ok: true })
 })
 
