@@ -17,6 +17,8 @@ import { clawbackStatements, expireStatements, ledgerStatements } from './credit
 import { CSP_REPORT_PATH, summarizeCspReports } from './csp'
 import { exchangeGoogleCode, googleAuthRedirect, googleClientId, googleOAuthConfig, verifyGoogleIdToken } from './google'
 import { publicGeneration, publicOrder, rateLimit, readJson, requireUser, pageParams } from './http'
+import { acceptManualGeneration } from './fulfillment'
+import { resolveFulfillmentMode } from './fulfillment-mode'
 import { enqueueJob, failGeneration, handleDeadLetter, handleVideoJob } from './jobs'
 import { jobToken, serveR2Object, sniffImageType, verifyUploadSignature } from './media'
 import { getModerationProvider } from './moderation'
@@ -338,10 +340,13 @@ app.post('/api/generations', async (c) => {
   if (cap > 0 && (await generationsToday(db, nowIso())) >= cap) throw new ApiError(429, 'daily_limit')
   await rememberLocale(c.env, user, body.locale)
 
-  const providerId = resolveEffectiveVideoProvider(c.env, settings)
+  const templateId = template?.id ?? site.template.id
+  const fulfillmentMode = resolveFulfillmentMode(settings, templateId)
+  const providerId = fulfillmentMode === 'manual' ? 'manual' : resolveEffectiveVideoProvider(c.env, settings)
   const mockOutcome = providerId === 'mock' && (body.mockOutcome === 'fail' || body.mockOutcome === 'hang') ? body.mockOutcome : null
   const scenePrompt = template ? templatePrompt(template, body.locale) : ''
   const metaObject: Record<string, string> = {}
+  if (fulfillmentMode === 'manual') metaObject.fulfillment = 'manual'
   if (mockOutcome) metaObject.mockOutcome = mockOutcome
   if (scenePrompt) metaObject.scenePrompt = scenePrompt
   const meta = Object.keys(metaObject).length ? JSON.stringify(metaObject) : null
@@ -355,7 +360,7 @@ app.post('/api/generations', async (c) => {
            status, provider, provider_meta, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
         )
-        .bind(id, user.id, template?.id ?? site.template.id, duration.id, duration.seconds, duration.credits, upload.id, providerId, meta, now, now),
+        .bind(id, user.id, templateId, duration.id, duration.seconds, duration.credits, upload.id, providerId, meta, now, now),
       ...ledgerStatements(db, {
         userId: user.id,
         delta: -duration.credits,
@@ -374,12 +379,17 @@ app.post('/api/generations', async (c) => {
     throw error
   }
 
-  try {
-    await enqueueJob(c.env, { kind: 'submit', generationId: id })
-  } catch (error) {
-    console.error('enqueue failed', error)
-    await failGeneration(c.env, id, 'enqueue_failed', 'Could not enqueue job')
-    throw new ApiError(503, 'queue_unavailable')
+  if (fulfillmentMode === 'manual') {
+    // 积分已经扣下。Sheet 和接单邮件失败只记在行上，不能把这次购买打成失败。
+    await acceptManualGeneration(c.env, id)
+  } else {
+    try {
+      await enqueueJob(c.env, { kind: 'submit', generationId: id })
+    } catch (error) {
+      console.error('enqueue failed', error)
+      await failGeneration(c.env, id, 'enqueue_failed', 'Could not enqueue job')
+      throw new ApiError(503, 'queue_unavailable')
+    }
   }
   const row = await db.prepare('SELECT * FROM generations WHERE id = ?').bind(id).first<GenerationRow>()
   return c.json({ generation: publicGeneration(row!) }, 201)

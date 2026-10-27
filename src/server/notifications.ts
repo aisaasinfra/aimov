@@ -35,6 +35,26 @@ export function adminAlerts(env: Env, key: string, build: (to: string) => Omit<O
   return adminEmails(env).map((to) => ({ ...build(to), key: `${key}:${to}`, to, locale: OPERATOR_EMAIL_LOCALE }) as OutgoingEmail)
 }
 
+// 人工队列接单：只通知已进入队列，不出“影片已完成”。失败不抛错。
+export function notifyGenerationAccepted(env: Env, generationId: string) {
+  return safely('generation accepted', async () => {
+    const generation = await env.DB.prepare('SELECT * FROM generations WHERE id = ?').bind(generationId).first<GenerationRow>()
+    if (!generation || generation.provider !== 'manual' || generation.status !== 'queued') return
+    const user = await activeUser(env, generation.user_id)
+    if (!user) return
+    await sendEmails(env, [
+      {
+        key: `generation_accepted:${generation.id}`,
+        template: 'generation_accepted',
+        to: user.email,
+        userId: user.id,
+        locale: user.locale,
+        params: { generationId: generation.id },
+      },
+    ])
+  })
+}
+
 export function notifyGenerationFinished(env: Env, generationId: string) {
   return safely('generation', async () => {
     const generation = await env.DB.prepare('SELECT * FROM generations WHERE id = ?').bind(generationId).first<GenerationRow>()

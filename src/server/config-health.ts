@@ -238,5 +238,19 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
     warn('EMAIL_FROM', `EMAIL_FROM 的域名 ${fromDomain} 与站点域名 ${input.siteDomain} 不同：确认该域名已在 Email Service 完成 Onboard`)
   }
 
+  // 履行默认 manual。Sheet 只是人工镜像，缺密钥不阻断上线：新单仍落 D1。三个都要有，只配一部分也提醒。
+  const sheetSecrets = ['GOOGLE_SHEETS_SPREADSHEET_ID', 'GOOGLE_SERVICE_ACCOUNT_EMAIL', 'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY'] as const
+  const missingSheets = sheetSecrets.filter((name) => {
+    const value = input.secrets[name]
+    if (value === true) return false
+    return !text(typeof value === 'string' ? value : undefined)
+  })
+  if (missingSheets.length) {
+    warn(
+      'GOOGLE_SHEETS',
+      `人工履约默认是 manual，Sheet 镜像还缺 ${missingSheets.join('、')}。新单仍写入 D1，同步失败记在 provider_meta.sheetError，配齐后可在后台重试`,
+    )
+  }
+
   return issues
 }

@@ -28,6 +28,7 @@ type GenerationRow = {
   status: string
   provider: string
   provider_request_id: string | null
+  provider_meta: string | null
   output_r2_key: string | null
   error_code: string | null
   error_message: string | null
@@ -40,11 +41,14 @@ type GenerationRow = {
 
 function AdminGenerations() {
   const [status, setStatus] = useState('')
+  const [provider, setProvider] = useState('')
   const [input, setInput] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
+  const [resultUrls, setResultUrls] = useState<Record<string, string>>({})
   const params = new URLSearchParams({ page: String(page) })
   if (status) params.set('status', status)
+  if (provider) params.set('provider', provider)
   if (q) params.set('q', q)
   const { data, error, loading, reload } = useAdminData<{ generations: GenerationRow[]; revenuePerCreditCents: number | null }>(
     `/api/admin/generations?${params}`,
@@ -60,6 +64,16 @@ function AdminGenerations() {
 
   async function fail(g: GenerationRow) {
     if (await adminAction(`/api/admin/generations/${g.id}/fail`, {}, `将任务 ${g.id} 标记为失败并退还 ${g.credits_cost} 积分？`)) await reload()
+  }
+
+  async function complete(g: GenerationRow) {
+    const resultUrl = resultUrls[g.id]?.trim() ?? ''
+    if (!resultUrl) return
+    if (await adminAction(`/api/admin/generations/${g.id}/complete`, { resultUrl }, `把任务 ${g.id} 标为成功，并把成品地址保存到 R2？`)) await reload()
+  }
+
+  async function retrySheet(g: GenerationRow) {
+    if (await adminAction(`/api/admin/generations/${g.id}/sheet`, {}, `把任务 ${g.id} 重新写入 Google Sheet？`)) await reload()
   }
 
   return (
@@ -87,6 +101,29 @@ function AdminGenerations() {
             ['failed', '失败'],
           ]}
         />
+        <FilterSelect
+          label="履行"
+          value={provider}
+          onChange={(v) => {
+            setProvider(v)
+            setPage(1)
+          }}
+          options={[
+            ['', '全部'],
+            ['manual', '人工队列'],
+          ]}
+        />
+        <button
+          type="button"
+          className="btn-ghost px-3 py-1.5 text-sm"
+          onClick={() => {
+            setProvider('manual')
+            setStatus('queued')
+            setPage(1)
+          }}
+        >
+          只看人工排队
+        </button>
         <form onSubmit={search} className="flex gap-2">
           <input className="input w-72 py-1.5" placeholder="任务 ID / 邮箱 / 服务商请求 ID" value={input} onChange={(e) => setInput(e.target.value)} />
           <button type="submit" className="btn-primary px-4 py-1.5">
@@ -139,9 +176,14 @@ function AdminGenerations() {
                     {g.refunded ? <span className="block text-xs text-muted">已退积分</span> : null}
                   </td>
                   <td className="text-xs">
-                    {g.provider}
+                    {g.provider === 'manual' ? '人工' : g.provider}
                     <span className="block font-mono text-muted">{g.provider_request_id ?? ''}</span>
                     <span className="block text-muted">尝试 {g.attempts} 次</span>
+                    {sheetErrorOf(g.provider_meta) ? (
+                      <span className="block text-red-600" title={sheetErrorOf(g.provider_meta) ?? ''}>
+                        Sheet 未同步
+                      </span>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap text-xs" data-testid="generation-cost">
                     <GenerationEconomics g={g} perCredit={perCredit} />
@@ -154,7 +196,32 @@ function AdminGenerations() {
                     {shortDate(g.created_at)}
                     <span className="block text-muted">{shortDate(g.completed_at)}</span>
                   </td>
-                  <td className="text-right">
+                  <td className="space-y-2 text-right">
+                    {g.provider === 'manual' && (g.status === 'queued' || g.status === 'processing') ? (
+                      <form
+                        className="flex flex-col items-end gap-1"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          void complete(g)
+                        }}
+                      >
+                        <input
+                          className="input w-56 py-1 text-xs"
+                          placeholder="成品 https 地址"
+                          value={resultUrls[g.id] ?? ''}
+                          onChange={(event) => setResultUrls((urls) => ({ ...urls, [g.id]: event.target.value }))}
+                          data-testid="manual-result-url"
+                        />
+                        <button type="submit" className="btn-primary px-2.5 py-1 text-xs" data-testid="manual-complete">
+                          保存成片
+                        </button>
+                      </form>
+                    ) : null}
+                    {g.provider === 'manual' && sheetErrorOf(g.provider_meta) ? (
+                      <button type="button" className="btn-ghost px-2.5 py-1 text-xs" onClick={() => retrySheet(g)} data-testid="manual-sheet-retry">
+                        重试 Sheet
+                      </button>
+                    ) : null}
                     {g.status === 'queued' || g.status === 'processing' ? (
                       <button type="button" className="btn-ghost px-2.5 py-1 text-xs" onClick={() => fail(g)}>
                         标记失败
@@ -170,6 +237,16 @@ function AdminGenerations() {
       <Pager page={page} onPage={setPage} hasMore={rows.length === PAGE_SIZE} />
     </AdminPage>
   )
+}
+
+function sheetErrorOf(meta: string | null): string | null {
+  if (!meta) return null
+  try {
+    const parsed = JSON.parse(meta) as { sheetError?: unknown }
+    return typeof parsed.sheetError === 'string' && parsed.sheetError ? parsed.sheetError : null
+  } catch {
+    return null
+  }
 }
 
 // 没出片 = 服务商不计费；出片后才失败（已退积分）= 只有成本没有收入

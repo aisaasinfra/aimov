@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { site } from '#/config/site'
+import { resolveFulfillmentMode } from '#/server/fulfillment-mode'
 import { DEFAULT_SETTINGS, assertCheckoutOpen, assertOpen, dailyCapGuard, generationsToday, getSettings, mergeSettings, parseSettingsPatch, settingFields, settingMatchesDefault, storedVideoProvider } from '#/server/settings'
 import type { UserRow } from '#/server/types'
 import { resolveEffectiveVideoProvider } from '#/server/video'
@@ -53,6 +54,27 @@ describe('后台提交的运营参数', () => {
     expect(rejected('production')).toContain('fal')
     expect(rejected('staging')).toContain('opengen')
     expect(rejected('production')).not.toContain('mock')
+    expect(invalid({ videoProvider: 'manual' })).toContain('当前视频生成渠道')
+  })
+
+  it('履行方式默认 manual；按模板覆盖只接受 manual 或 auto', () => {
+    expect(DEFAULT_SETTINGS.fulfillmentMode).toBe('manual')
+    expect(DEFAULT_SETTINGS.fulfillmentModeByTemplate).toBe('')
+    expect(parseSettingsPatch({ fulfillmentMode: 'auto' })).toEqual({ fulfillmentMode: 'auto' })
+    expect(parseSettingsPatch({ fulfillmentModeByTemplate: '{ "new-york" : "auto" }' })).toEqual({ fulfillmentModeByTemplate: '{ "new-york" : "auto" }' })
+    expect(invalid({ fulfillmentMode: 'sheet' })).toContain('生成履行方式')
+    expect(invalid({ fulfillmentModeByTemplate: '{"new-york":"fal"}' })).toContain('JSON')
+    expect(invalid({ fulfillmentModeByTemplate: '[]' })).toContain('JSON')
+    expect(invalid({ fulfillmentModeByTemplate: 'not-json' })).toContain('JSON')
+    expect(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{bad' })).toMatchObject({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '' })
+    expect(mergeSettings({}).fulfillmentMode).toBe('manual')
+    expect(resolveFulfillmentMode(mergeSettings({}), 'new-york')).toBe('manual')
+    expect(resolveFulfillmentMode(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' }), 'paris')).toBe('manual')
+    expect(resolveFulfillmentMode(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' }), 'new-york')).toBe('auto')
+    expect(settingFields().some((field) => field.key === 'fulfillmentMode' && field.kind === 'enum')).toBe(true)
+    const base = { VIDEO_PROVIDER: 'fal' } as unknown as Env
+    expect(settingMatchesDefault('fulfillmentMode', 'manual', base)).toBe(true)
+    expect(settingMatchesDefault('fulfillmentMode', 'auto', base)).toBe(false)
   })
 
   it('邀请奖励的上限跟随 site.ts：site.ts 关闭邀请时只能是 0', () => {

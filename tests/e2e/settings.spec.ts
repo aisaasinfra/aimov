@@ -16,8 +16,10 @@ const setSettings = (values: Record<string, unknown>) => json<SettingsView>(post
 
 async function resetSettings() {
   const { values, defaults } = await json<SettingsView>(admin.get('/api/admin/settings'))
-  const changed = Object.fromEntries(Object.entries(defaults).filter(([key, value]) => values[key] !== value))
+  // 产品默认是 manual。这套 e2e 依赖 mock 入队出片，所以履行方式保持 auto，不跟其它默认值一起清掉。
+  const changed = Object.fromEntries(Object.entries(defaults).filter(([key, value]) => key !== 'fulfillmentMode' && values[key] !== value))
   if (Object.keys(changed).length) await setSettings(changed)
+  if (values.fulfillmentMode !== 'auto') await setSettings({ fulfillmentMode: 'auto' })
 }
 
 const auditEntries = async () => (await json<{ entries: AuditEntry[] }>(admin.get('/api/admin/audit'))).entries

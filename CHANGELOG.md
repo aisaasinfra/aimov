@@ -8,6 +8,18 @@ The in-app page is `/changelog` (six public locales: en, de, es, fr, pt-BR, zh-T
 
 站内页面是 `/changelog`（六种公开语言：en、de、es、fr、pt-BR、zh-TW）。本文件仍是仓库日志。
 
+## 2026-10-27
+
+### Added: fulfillment switch (manual Sheet queue or auto API)
+
+- Admins set `fulfillmentMode` to `manual` or `auto` (default `manual` when unset). Optional `fulfillmentModeByTemplate` overrides by template id. This does not change Waffo or PayPal checkout.
+- `manual` charges credits, stores `generations.provider=manual` and `status=queued`, and does not enqueue `VIDEO_QUEUE` or call a video vendor. A Google Sheet row is the ops mirror. If that write fails, the D1 row stays and `provider_meta.sheetError` records it. The user email says the video is in the queue.
+- Admins can paste a result `https` URL (fetched into R2) or fail the job with the existing credit refund. Queue jobs and the backlog alert skip `manual` rows.
+
+Upgrading a site: merge. No migration. Optional secrets `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` when you want the Sheet mirror. Until an admin sets `auto`, new generations stay on the manual queue. Local e2e sets `auto` so the mock provider still runs.
+
+新增：生成履行开关。默认 `manual`（扣积分、不入队、镜像到 Google Sheet）；`auto` 保持现有厂商队列。可按模板覆盖。没有迁移。要写 Sheet 再配三个可选 secret。
+
 ## 2026-10-26
 
 ### Added: runtime video channel and OpenGen

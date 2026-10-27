@@ -20,11 +20,17 @@ export type VideoStatus =
   | { state: 'completed'; output: { url: string } | { r2Key: string }; costCents?: number }
   | { state: 'failed'; code: string; message: string; retryable?: boolean }
 
-export const VIDEO_PROVIDER_IDS = ['fal', 'yir', 'nanoapi', 'opengen', 'mock'] as const
+// manual 只出现在 generations.provider：人工履约，不是 VIDEO_PROVIDER，也不能交给 getVideoProvider。
+export const VIDEO_PROVIDER_IDS = ['fal', 'yir', 'nanoapi', 'opengen', 'mock', 'manual'] as const
 export type VideoProviderId = (typeof VIDEO_PROVIDER_IDS)[number]
+export type ExecutableVideoProviderId = Exclude<VideoProviderId, 'manual'>
+
+export function isManualProvider(id: string): id is 'manual' {
+  return id === 'manual'
+}
 
 export interface VideoProvider {
-  id: VideoProviderId
+  id: ExecutableVideoProviderId
   submit(input: VideoSubmitInput): Promise<VideoSubmitResult>
   status(requestId: string, meta: Record<string, unknown>): Promise<VideoStatus>
   // 出一条成片的估算成本（美分），出片后写入 generations.provider_cost_cents

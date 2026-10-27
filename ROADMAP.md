@@ -201,6 +201,14 @@
   - 媒体：NanoAPI 下载素材用浏览器 UA，读视频要 Range。不支持 Range 或不带扩展名的视频地址都以 `internal_error` 失败，并全额退款。
   - 未在 aimov 验证：后台“测试连接”按钮、付费出片。
 
+**#36 生成履行开关**（2026-10-27）
+
+- 后台 `fulfillmentMode`：`manual` | `auto`。数据库没存时默认 `manual`。可选 `fulfillmentModeByTemplate`（模板 id → manual/auto）。收款（Waffo / PayPal.cn）不动。
+- `manual`：扣积分，`generations.provider=manual`、`status=queued`，不 `enqueueJob`、不调厂商。Google Sheet 是人工镜像（服务账号 JWT + Sheets API v4）。写失败保留 D1 行，`provider_meta.sheetError`，后台可重试。邮件只通知已进入队列。
+- 后台可对人工单粘贴成品 https 地址（`storeOutputFromUrl` 进 R2）或用现有 `failGeneration` 退积分。定时维护和积压告警跳过 `manual`，避免 45 分钟被当成厂商超时退款。
+- 本地 e2e 在 global setup 里把履行拨到 `auto`，否则 mock 队列不会跑。单测覆盖模式解析、manual 不入队、auto 仍入队、Sheet 客户端（假 fetch）。
+- 未做：Drive 上传、真实 Google 账号联调、把默认改成 auto。
+
 **#35 运行时视频渠道与 OpenGen**（2026-10-26）
 
 - 后台 `/admin/settings` 增加「当前视频生成渠道」。运行时覆盖优先，否则 `VIDEO_PROVIDER`。创建时写入已有 `generations.provider`。jobs 提交、重试、轮询和回调只读这一列。切换约 60 秒后只影响新工单。`isProduction`（staging 与 production）保存和执行都拒绝 `mock`。

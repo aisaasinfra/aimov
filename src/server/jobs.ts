@@ -8,7 +8,7 @@ import { sweepExpiredMedia } from './retention'
 import { grantDueSubscriptions } from './subscriptions'
 import { nowIso } from './util'
 import { getVideoProvider } from './video'
-import { VideoProviderError, type VideoProviderId } from './video/types'
+import { isManualProvider, VideoProviderError, type ExecutableVideoProviderId } from './video/types'
 
 const JOB_TIMEOUT_MINUTES = 45
 // 成片大小上限：带 Content-Length 时直接流式写入 R2，不占 Worker 内存；没带时只能边读边缓存，上限更低（Worker 内存 128 MB）
@@ -59,7 +59,7 @@ export async function storeOutputFromUrl(
   await env.MEDIA.put(key, bytes, { httpMetadata })
   return true
 }
-const POLL_DELAY_SECONDS: Record<VideoProviderId, number> = { mock: 2, fal: 20, yir: 20, nanoapi: 30, opengen: 20 }
+const POLL_DELAY_SECONDS: Record<ExecutableVideoProviderId, number> = { mock: 2, fal: 20, yir: 20, nanoapi: 30, opengen: 20 }
 
 export async function enqueueJob(env: Env, message: VideoJobMessage, delaySeconds = 0) {
   await env.VIDEO_QUEUE.send(message, delaySeconds > 0 ? { delaySeconds } : undefined)
@@ -101,6 +101,8 @@ export async function handleVideoJob(env: Env, message: VideoJobMessage) {
     .bind(message.generationId)
     .first<GenerationRow>()
   if (!generation) return
+  // 人工单不进厂商。误投的队列消息直接丢掉，不能 getVideoProvider('manual')。
+  if (isManualProvider(generation.provider)) return
   if (message.kind === 'submit') await submitGeneration(env, generation)
   else await pollGeneration(env, generation)
 }
@@ -303,9 +305,10 @@ export async function runScheduledMaintenance(env: Env) {
   const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString()
   const timeoutBefore = new Date(Date.now() - JOB_TIMEOUT_MINUTES * 60_000).toISOString()
 
+  // manual 停在人工队列，不能按厂商任务超时退款，也不能补投 VIDEO_QUEUE。
   const stuck = await db
     .prepare(
-      `SELECT * FROM generations WHERE status IN ('queued', 'processing') AND updated_at < ? ORDER BY updated_at LIMIT 50`,
+      `SELECT * FROM generations WHERE status IN ('queued', 'processing') AND provider != 'manual' AND updated_at < ? ORDER BY updated_at LIMIT 50`,
     )
     .bind(staleBefore)
     .all<GenerationRow>()

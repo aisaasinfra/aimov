@@ -32,6 +32,9 @@ function ready(overrides: { vars?: Record<string, string>; secrets?: ConfigInput
       FAL_KEY: 'f',
       OPENAI_API_KEY: 'o',
       TURNSTILE_SECRET_KEY: 't',
+      GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet',
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: 'sheets@example.iam.gserviceaccount.com',
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: 'pem',
       ...overrides.secrets,
     },
     bindings: REQUIRED_BINDINGS,
@@ -46,6 +49,18 @@ describe('checkConfig', () => {
   it('完整的生产配置没有任何报告；www 子域名和发信子域名算同一站点', () => {
     expect(checkConfig(ready())).toEqual([])
     expect(checkConfig(ready({ vars: { SITE_URL: 'https://www.moonhop.ai' } }))).toEqual([])
+  })
+
+  it('人工 Sheet 密钥缺了只提醒；配齐则不提', () => {
+    const { GOOGLE_SHEETS_SPREADSHEET_ID: _sheet, GOOGLE_SERVICE_ACCOUNT_EMAIL: _email, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: _key, ...secrets } = ready().secrets
+    const missing = checkConfig({ ...ready(), secrets })
+    expect(missing).toEqual([expect.objectContaining({ level: 'warn', key: 'GOOGLE_SHEETS' })])
+    expect(missing[0]!.message).toContain('GOOGLE_SHEETS_SPREADSHEET_ID')
+    expect(missing[0]!.message).toContain('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')
+    const partial = checkConfig(ready({ secrets: { GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: '' } }))
+    expect(partial.map((issue) => issue.key)).toEqual(['GOOGLE_SHEETS'])
+    expect(partial[0]!.message).toContain('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY')
+    expect(partial[0]!.message).not.toContain('GOOGLE_SHEETS_SPREADSHEET_ID')
   })
 
   it('只要求所选服务商的密钥；运行时能看到值时拦截弱 SESSION_SECRET，doctor 只核对名字', () => {

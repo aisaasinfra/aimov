@@ -139,7 +139,7 @@ export async function collectHealthStats(env: Env, now: number, since?: string):
       )
       .bind(accountStart, accountStart, ...PROVIDER_ACCOUNT_ERRORS),
     db
-      .prepare(`SELECT COUNT(*) AS n FROM generations WHERE status IN ('queued', 'processing') AND created_at < ?`)
+      .prepare(`SELECT COUNT(*) AS n FROM generations WHERE status IN ('queued', 'processing') AND provider != 'manual' AND created_at < ?`)
       .bind(new Date(now - ALERT_RULES.job_backlog.windowMinutes * 60_000).toISOString()),
     db.prepare(`SELECT COUNT(*) AS n FROM payment_events WHERE status = 'failed' AND created_at >= ?`).bind(start('payment_webhook')),
     db

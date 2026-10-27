@@ -7,6 +7,7 @@ import type { AlertKind } from './alerts'
 
 export interface TemplateParams {
   generation_succeeded: { generationId: string; expiresAt: string | null }
+  generation_accepted: { generationId: string }
   generation_failed: { generationId: string; credits: number }
   order_paid: { orderId: string; credits: number; amount: string }
   takedown_received: { reportId: string; dueAt: string }
@@ -206,6 +207,66 @@ const USER_TEMPLATES: { [K in UserTemplate]: Record<Locale, Render<K>> } = {
       subject: `你的 ${brand} 影片已產生`,
       heading: '影片已產生',
       paragraphs: ['你的 AI 影片可以觀看和下載了。', p.expiresAt ? `成片保留到 ${date(ctx, p.expiresAt)}，之後會自動刪除；想長期保存請先下載。` : ''],
+      cta: { label: '查看我的影片', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER['zh-TW'],
+    }),
+  },
+
+  generation_accepted: {
+    en: (_p, ctx) => ({
+      subject: `Your ${brand} video is in the queue`,
+      heading: 'We received your photo',
+      paragraphs: [
+        "Your video is in the queue. We'll email you when it's ready.",
+        'You can leave this page. The status stays queued until the video is ready.',
+      ],
+      cta: { label: 'Open my videos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.en,
+    }),
+    de: (_p, ctx) => ({
+      subject: `Dein ${brand}-Video ist in der Warteschlange`,
+      heading: 'Wir haben dein Foto erhalten',
+      paragraphs: [
+        'Dein Video ist in der Warteschlange. Wir schreiben dir, sobald es fertig ist.',
+        'Du kannst die Seite verlassen. Der Status bleibt in der Warteschlange, bis das Video fertig ist.',
+      ],
+      cta: { label: 'Meine Videos öffnen', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.de,
+    }),
+    es: (_p, ctx) => ({
+      subject: `Tu video de ${brand} está en la cola`,
+      heading: 'Recibimos tu foto',
+      paragraphs: [
+        'Tu video está en la cola. Te escribiremos cuando esté listo.',
+        'Puedes salir de esta página. El estado sigue en cola hasta que el video esté listo.',
+      ],
+      cta: { label: 'Abrir mis videos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.es,
+    }),
+    fr: (_p, ctx) => ({
+      subject: `Votre vidéo ${brand} est dans la file`,
+      heading: 'Nous avons reçu votre photo',
+      paragraphs: [
+        "Votre vidéo est dans la file d'attente. Nous vous écrirons lorsqu'elle sera prête.",
+        "Vous pouvez quitter cette page. Le statut reste en file jusqu'à ce que la vidéo soit prête.",
+      ],
+      cta: { label: 'Ouvrir mes vidéos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER.fr,
+    }),
+    'pt-BR': (_p, ctx) => ({
+      subject: `Seu vídeo ${brand} está na fila`,
+      heading: 'Recebemos sua foto',
+      paragraphs: [
+        'Seu vídeo está na fila. Avisaremos por e-mail quando estiver pronto.',
+        'Você pode sair desta página. O status continua na fila até o vídeo ficar pronto.',
+      ],
+      cta: { label: 'Abrir meus vídeos', url: link(ctx, '/dashboard') },
+      footer: AI_FOOTER['pt-BR'],
+    }),
+    'zh-TW': (_p, ctx) => ({
+      subject: `你的 ${brand} 影片已進入佇列`,
+      heading: '已收到你的照片',
+      paragraphs: ['影片已進入佇列。完成後會再寄一封信給你。', '可以離開這個頁面。狀態會維持在佇列中，直到影片完成。'],
       cta: { label: '查看我的影片', url: link(ctx, '/dashboard') },
       footer: AI_FOOTER['zh-TW'],
     }),
