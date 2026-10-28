@@ -2,9 +2,9 @@ import type { Hono } from 'hono'
 import { LOCALES, LOCALE_META, site, type Locale } from '#/config/site'
 import { audit, readJson, requireAdmin } from './http'
 import type { AppContext, UserRow } from './types'
-import { ApiError, nowIso } from './util'
+import { ApiError, isProduction, nowIso } from './util'
 import { dualCheckoutConfigured } from './payments'
-import { parseFulfillmentModeMap, type FulfillmentMode } from './fulfillment-mode'
+import { type FulfillmentMode } from './fulfillment-mode'
 import { parseVideoProviderId, videoProviderOptions } from './video'
 import type { VideoProviderId } from './video/types'
 
@@ -22,10 +22,8 @@ export type RuntimeSettings = {
   signupBonusValidDays: number
   referralRewardCredits: number
   generationDailyCap: number
-  // 未写入数据库时是 manual。auto 才走现有视频渠道入队。
+  // 未写入数据库时是 manual。auto 只走 OpenGen（或开发 mock / 默认关闭的应急开关）。全站一个值，没有按模板分轨。
   fulfillmentMode: FulfillmentMode
-  // JSON 文本：{ "<templateId>": "manual" | "auto" }。空字符串表示没有按模板覆盖。
-  fulfillmentModeByTemplate: string
 } & Record<`announcement.${Locale}`, string>
 
 // videoProvider 不在 RuntimeSettings 里：它的默认值是当前 env.VIDEO_PROVIDER，不能写进静态 DEFAULT_SETTINGS。
@@ -43,7 +41,7 @@ export type SettingField =
 const referralOn = site.referralRewardCredits > 0
 
 const VIDEO_PROVIDER_HELP =
-  '新创建的工单锁定为这里的渠道，约 60 秒缓存后生效。已排队或处理中的工单继续用创建时写入的渠道。未改时与环境变量 VIDEO_PROVIDER 相同，保存成那个值会删掉覆盖。mock 只在 development / preview 出现。密钥不在这里：fal / yir / nanoapi 仍用各自 secret；OpenGen 只配 OPENGEN_BASE_URL 和 OPENGEN_API_KEY，厂商 Key 留在 OpenGen 主机。没配连接信息的渠道仍可选，提交时按失败退点。'
+  '日常自动生成只走 OpenGen。这里可选 OpenGen，development / preview 还可以选 mock。fal / yir / nanoapi 不是日常渠道，保存它们会被拒绝。新工单锁定渠道，约 60 秒后只影响新任务。已在处理的工单继续用创建时写入的 provider。应急开关是环境变量 EMERGENCY_VIDEO_PROVIDER，默认关闭，不能和 OpenGen 同时打开。OpenGen 只配 OPENGEN_BASE_URL 和 OPENGEN_API_KEY，厂商 Key 留在 OpenGen 主机。'
 
 export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
   const fields: SettingField[] = [
@@ -64,7 +62,7 @@ export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
 
 const FULFILLMENT_MODE_OPTIONS = [
   { value: 'manual', label: '人工队列（Google Sheet）' },
-  { value: 'auto', label: '自动生成（当前视频渠道）' },
+  { value: 'auto', label: '自动生成（OpenGen）' },
 ] as const
 
 export const SETTING_FIELDS: readonly SettingField[] = [
@@ -72,16 +70,8 @@ export const SETTING_FIELDS: readonly SettingField[] = [
     key: 'fulfillmentMode',
     kind: 'enum',
     label: '生成履行方式',
-    help: '新任务按这个走。manual：扣积分后进入人工队列，不调用视频服务商、不进 VIDEO_QUEUE。auto：沿用上面的视频渠道并入队。没存过时默认 manual。约 60 秒后只影响新任务。不改变 Waffo / PayPal 收款。',
+    help: '全站一个开关，只影响新任务。manual：扣积分后进入人工队列，不调用视频服务商、不进 VIDEO_QUEUE。auto：只走 OpenGen。不能自动的组件会在扣积分前拒绝，不会改成人工。没存过时默认 manual。不改变收款。',
     options: FULFILLMENT_MODE_OPTIONS,
-  },
-  {
-    key: 'fulfillmentModeByTemplate',
-    kind: 'text',
-    multiline: true,
-    maxLength: 4000,
-    label: '按模板覆盖履行方式',
-    help: '可选 JSON。键是模板 id，值只能是 manual 或 auto。没写到的模板用上面的站点默认。例：{"new-york":"auto"}。留空表示全部跟站点默认。',
   },
   {
     key: 'maintenance',
@@ -153,7 +143,6 @@ export const DEFAULT_SETTINGS: RuntimeSettings = {
   referralRewardCredits: site.referralRewardCredits,
   generationDailyCap: 0,
   fulfillmentMode: 'manual',
-  fulfillmentModeByTemplate: '',
 }
 
 const CACHE_KEY = 'settings:v1'
@@ -164,20 +153,28 @@ function isValid(field: SettingField, value: unknown) {
   if (field.kind === 'int') return Number.isInteger(value) && (value as number) >= field.min && (value as number) <= field.max
   if (field.kind === 'enum') return typeof value === 'string' && field.options.some((option) => option.value === value)
   if (typeof value !== 'string' || value.length > field.maxLength) return false
-  if (field.key === 'fulfillmentModeByTemplate') return parseFulfillmentModeMap(value) !== null
   return true
 }
 
 // 存值等于这条渠道的环境变量默认时删覆盖行。其它字段仍对照静态 DEFAULT_SETTINGS。
+// 后台显示的日常渠道。库存的 fal / yir / nanoapi 和环境变量里的同名值都不是日常默认。
+export function displayedVideoProvider(env: { APP_ENV?: string; VIDEO_PROVIDER?: string }, stored: string | null): string {
+  if (stored === 'opengen' || (stored === 'mock' && !isProduction(env))) return stored
+  if (!isProduction(env) && (env.VIDEO_PROVIDER ?? '') === 'mock') return 'mock'
+  return 'opengen'
+}
+
 export function settingMatchesDefault(key: string, value: unknown, env: Env) {
-  if (key === 'videoProvider') return value === (env.VIDEO_PROVIDER ?? '')
+  if (key === 'videoProvider') return value === displayedVideoProvider(env, null)
   return key in DEFAULT_SETTINGS && value === DEFAULT_SETTINGS[key as keyof RuntimeSettings]
 }
 
-// 合法覆盖；mock 在 production / staging、未知值都丢掉，回退到 env.VIDEO_PROVIDER
+const LEGACY_DAILY_PROVIDERS = new Set(['fal', 'yir', 'nanoapi'])
+
+// 合法的日常覆盖只有 opengen，以及非 production 的 mock。fal / yir / nanoapi 的旧存值丢掉。
 export function storedVideoProvider(stored: Record<string, unknown>, env: { APP_ENV?: string }): VideoProviderId | null {
   const value = stored.videoProvider
-  if (typeof value !== 'string' || !value) return null
+  if (typeof value !== 'string' || !value || LEGACY_DAILY_PROVIDERS.has(value)) return null
   try {
     return parseVideoProviderId(value, env)
   } catch {
@@ -208,9 +205,6 @@ export function parseSettingsPatch(input: unknown, env: { APP_ENV?: string } = {
     // 公告只存一行纯文本
     const value = field.kind === 'text' && typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : raw
     if (!isValid(field, value)) {
-      if (field.key === 'fulfillmentModeByTemplate') {
-        throw new ApiError(400, 'invalid_setting', `${field.label}：应为 JSON 对象，键是模板 id，值只能是 manual 或 auto`)
-      }
       const rule =
         field.kind === 'int'
           ? `${field.min}–${field.max} 的整数`
@@ -294,20 +288,30 @@ async function adminView(db: D1Database, env: Env) {
       )
       .all<{ key: string; updatedAt: string; updatedBy: string | null }>(),
   ])
-  const baseline = env.VIDEO_PROVIDER ?? ''
   const override = storedVideoProvider(stored, env)
   return {
     fields: settingFields(env),
-    values: { ...mergeSettings(stored), videoProvider: override ?? baseline },
-    // 渠道默认是当前环境变量，不放进静态 DEFAULT_SETTINGS
-    defaults: { ...DEFAULT_SETTINGS, videoProvider: baseline },
+    values: { ...mergeSettings(stored), videoProvider: displayedVideoProvider(env, override) },
+    // 日常默认是 OpenGen；development / preview 且 VIDEO_PROVIDER=mock 时显示 mock。不把 fal / yir / nanoapi 当成日常默认。
+    defaults: { ...DEFAULT_SETTINGS, videoProvider: displayedVideoProvider(env, null) },
     overrides: meta.results,
   }
 }
 
+export async function forgetLegacyFulfillmentMap(env: Env): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT key FROM settings WHERE key = 'fulfillmentModeByTemplate'`).first()
+  if (!row) return false
+  await env.DB.prepare(`DELETE FROM settings WHERE key = 'fulfillmentModeByTemplate'`).run()
+  await env.KV.delete(CACHE_KEY)
+  return true
+}
+
 export function registerSettingsAdminRoutes(routes: Hono<AppContext>) {
   // 后台读 D1 原值，不走缓存
-  routes.get('/settings', async (c) => c.json(await adminView(c.env.DB, c.env)))
+  routes.get('/settings', async (c) => {
+    await forgetLegacyFulfillmentMap(c.env)
+    return c.json(await adminView(c.env.DB, c.env))
+  })
 
   routes.post('/settings', async (c) => {
     const admin = requireAdmin(c)
@@ -315,7 +319,7 @@ export function registerSettingsAdminRoutes(routes: Hono<AppContext>) {
     const db = c.env.DB
     const raw = await loadStored(db)
     const before = mergeSettings(raw)
-    const beforeVideo = storedVideoProvider(raw, c.env) ?? (c.env.VIDEO_PROVIDER ?? '')
+    const beforeVideo = displayedVideoProvider(c.env, storedVideoProvider(raw, c.env))
     const now = nowIso()
     const changes: Record<string, { from: unknown; to: unknown }> = {}
     const statements: D1PreparedStatement[] = []

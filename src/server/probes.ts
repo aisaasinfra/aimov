@@ -11,9 +11,10 @@ import { waffoEnvironment } from './payments/waffo'
 import type { AppContext, UserRow } from './types'
 import { getSettings } from './settings'
 import { ApiError, cleanSecret, createId, parseJsonRecord } from './util'
-import { parseVideoProviderId, resolveEffectiveVideoProvider } from './video'
+import { describeAutoRoute } from './auto-route'
+import { parseVideoProviderId } from './video'
 import type { VideoProviderId } from './video/types'
-import { OPENGEN_HEALTH_PATH, describeOpenGenConfig, openGenUrl } from './video/opengen'
+import { OPENGEN_HEALTH_PATH, describeOpenGenConfig, openGenDeploymentClass, openGenUrl } from './video/opengen'
 
 // 后台“测试连接”：按当前配置对每个依赖做一次只读或可自行清理的探测，不建收银台、不提交生成任务。
 // 结果里只有状态和说明，不回显任何密钥（说明文字里出现的密钥值也会被替换掉）。
@@ -185,14 +186,24 @@ function balanceOutcome(amount: number, currency: string, provider: string) {
 
 async function probeOpenGen(env: Env): Promise<Outcome> {
   const config = describeOpenGenConfig(env)
-  if (config.mode === 'stub') return ok('联调 stub 已开启，不访问 OpenGen 主机（不是真实厂商验收）')
+  if (config.mode === 'stub') return ok('联调 stub 已开启，不访问 OpenGen 主机。这是联调，不是④。')
   if (config.mode === 'missing') return fail(config.message)
-  const response = await fetch(openGenUrl(config.baseUrl, OPENGEN_HEALTH_PATH), {
-    headers: { Authorization: `Bearer ${config.apiKey}`, Accept: 'application/json' },
-  })
-  if (response.status === 401 || response.status === 403) return fail('OPENGEN_API_KEY 无效')
+  const klass = openGenDeploymentClass(config.baseUrl)
+  let response: Response
+  try {
+    response = await fetch(openGenUrl(config.baseUrl, OPENGEN_HEALTH_PATH), {
+      headers: { Authorization: `Bearer ${config.apiKey}`, Accept: 'application/json' },
+    })
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'network'
+    return fail(`OpenGen 不可达：${reason}`)
+  }
+  if (response.status === 401 || response.status === 403) return fail('OpenGen 已配置但不健康：鉴权失败')
   if (!response.ok) return fail(`OpenGen 健康检查返回 HTTP ${response.status}`)
-  return ok('鉴权正常，OpenGen 端点可达')
+  if (klass === 'local' || klass === 'tunnel') {
+    return warn(`OpenGen 已响应，但地址是${klass === 'local' ? '本机' : '隧道'}。这是联调，不是生产就绪，也不是④。`)
+  }
+  return ok('鉴权正常，OpenGen 端点可达。这不是生产就绪证据。')
 }
 
 function probeFailure(error: unknown) {
@@ -208,7 +219,7 @@ async function probeResolved(env: Env, id: VideoProviderId): Promise<{ label: st
   }
 }
 
-// 与创建工单同一次解析。options.provider 指定单次探测目标；否则运行时覆盖优先，再回退 env.VIDEO_PROVIDER。
+// 与新工单同一次解析（describeAutoRoute）。options.provider 仍可显式探测 fal / yir / nanoapi。
 async function resolveVideoProbe(
   env: Env,
   options?: { provider?: string; settings?: { videoProvider?: string | null } },
@@ -222,7 +233,9 @@ async function resolveVideoProbe(
   }
   const settings = options?.settings ?? (await loadVideoSettings(env))
   try {
-    return await probeResolved(env, resolveEffectiveVideoProvider(env, settings))
+    const route = describeAutoRoute(env, settings)
+    if (!route.ok) return { label: route.code === 'emergency_switch_conflict' ? 'emergency' : 'opengen', outcome: fail(route.message) }
+    return await probeResolved(env, route.provider)
   } catch (error) {
     return { label: env.VIDEO_PROVIDER || '(未配置)', outcome: probeFailure(error) }
   }

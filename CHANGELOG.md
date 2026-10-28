@@ -8,6 +8,21 @@ The in-app page is `/changelog` (six public locales: en, de, es, fr, pt-BR, zh-T
 
 站内页面是 `/changelog`（六种公开语言：en、de、es、fr、pt-BR、zh-TW）。本文件仍是仓库日志。
 
+## 2026-10-28
+
+### Changed: whole-site generation chain
+
+- `fulfillmentMode` is whole-site. `fulfillmentModeByTemplate` is ignored and removed from the admin form. A stored row is deleted the next time an admin opens settings.
+- Everyday `auto` submits and polls OpenGen only. `VIDEO_PROVIDER=fal|yir|nanoapi` is not target-state auto. `EMERGENCY_VIDEO_PROVIDER` defaults to empty and fails closed when OpenGen is also configured.
+- New generations store `component_id` and `component_version` (`migrations/0017_generation_component.sql`). Only `image-source-video` v1 is auto-eligible. Other shapes are rejected before debit while the site is `auto`. The OpenGen jobs body is unchanged and does not include `component_id`.
+- OpenGen webhooks only enqueue a poll. The body is discarded. A task id on the row never moves that row to manual. Unreachable-before-submit uses the same `generation_id` on the manual queue, one debit.
+- Manual orders email `ADMIN_EMAILS`. The user queue email is separate. Sheet rows stay a mirror: duplicates of the same `generation_id` are deleted, and Sheet edits do not change D1 ownership.
+- Config checks warn when vendor secrets sit on the Worker while the emergency switch is off, and they do not treat a clean OpenGen check, a tunnel, localhost, or the stub as production cutover.
+
+Upgrading a site: merge, then apply migration `0017`. Add `EMERGENCY_VIDEO_PROVIDER` (empty) next to the other vars. Point everyday auto at OpenGen and remove fal / yir / nanoapi secrets from the production Worker when you are ready; this release does not record that cutover as done.
+
+变更：履行方式改为全站一个开关。日常 auto 只走 OpenGen。生成单记下组件 id 和版本。人工单会通知履约负责人。应急开关默认关闭。这次不宣称生产收口或④已经切换。
+
 ## 2026-10-27
 
 ### Added: fulfillment switch (manual Sheet queue or auto API)

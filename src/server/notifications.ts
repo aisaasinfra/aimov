@@ -35,7 +35,8 @@ export function adminAlerts(env: Env, key: string, build: (to: string) => Omit<O
   return adminEmails(env).map((to) => ({ ...build(to), key: `${key}:${to}`, to, locale: OPERATOR_EMAIL_LOCALE }) as OutgoingEmail)
 }
 
-// 人工队列接单：只通知已进入队列，不出“影片已完成”。失败不抛错。
+// 人工队列接单：只通知用户已进入队列，不出“影片已完成”。失败不抛错。
+// 履约负责人的通知是另一封（notifyManualOrderOperators）。用户这封不算。
 export function notifyGenerationAccepted(env: Env, generationId: string) {
   return safely('generation accepted', async () => {
     const generation = await env.DB.prepare('SELECT * FROM generations WHERE id = ?').bind(generationId).first<GenerationRow>()
@@ -53,6 +54,34 @@ export function notifyGenerationAccepted(env: Env, generationId: string) {
       },
     ])
   })
+}
+
+// 新的人工单通知履约负责人。没有重复提醒：SLA 分钟数未定，不在这里排第二封。
+// 以后如果加提醒，后一封的间隔必须不短于前一封。
+export async function notifyManualOrderOperators(env: Env, generationId: string): Promise<'sent' | 'none' | 'skipped'> {
+  try {
+    const generation = await env.DB.prepare('SELECT id, template_id, provider, status FROM generations WHERE id = ?')
+      .bind(generationId)
+      .first<{ id: string; template_id: string; provider: string; status: string }>()
+    if (!generation || generation.provider !== 'manual' || generation.status !== 'queued') return 'skipped'
+    const raw = env.ADMIN_EMAILS
+    const emails = typeof raw === 'string' ? raw.split(',').map((item) => item.trim().toLowerCase()).filter(Boolean) : []
+    if (!emails.length) return 'none'
+    await sendEmails(
+      env,
+      emails.map((to) => ({
+        key: `manual_order_operator:${generation.id}:${to}`,
+        template: 'manual_order_operator' as const,
+        to,
+        locale: OPERATOR_EMAIL_LOCALE,
+        params: { generationId: generation.id, templateId: generation.template_id },
+      })),
+    )
+    return 'sent'
+  } catch (error) {
+    console.error('notify manual order operator failed', error)
+    return 'skipped'
+  }
 }
 
 export function notifyGenerationFinished(env: Env, generationId: string) {

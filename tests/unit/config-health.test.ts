@@ -14,7 +14,10 @@ function ready(overrides: { vars?: Record<string, string>; secrets?: ConfigInput
       APP_ENV: 'production',
       SITE_URL: 'https://moonhop.ai',
       PAYMENT_PROVIDER: 'waffo',
-      VIDEO_PROVIDER: 'fal',
+      VIDEO_PROVIDER: 'opengen',
+      OPENGEN_BASE_URL: 'https://og.example',
+      OPENGEN_STUB: '0',
+      EMERGENCY_VIDEO_PROVIDER: '',
       MODERATION_PROVIDER: 'openai',
       ADMIN_EMAILS: 'ops@moonhop.ai',
       EMAIL_FROM: 'noreply@mail.moonhop.ai',
@@ -29,7 +32,7 @@ function ready(overrides: { vars?: Record<string, string>; secrets?: ConfigInput
       GOOGLE_CLIENT_SECRET: 'g',
       WAFFO_MERCHANT_ID: 'm',
       WAFFO_PRIVATE_KEY: 'k',
-      FAL_KEY: 'f',
+      OPENGEN_API_KEY: 'og',
       OPENAI_API_KEY: 'o',
       TURNSTILE_SECRET_KEY: 't',
       GOOGLE_SHEETS_SPREADSHEET_ID: 'sheet',
@@ -69,12 +72,12 @@ describe('checkConfig', () => {
       secrets: { DODO_API_KEY: 'd' },
     })
     expect(checkConfig(dodo)).toEqual([expect.objectContaining({ level: 'error', key: 'DODO_WEBHOOK_SECRET' })])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' } }))).toEqual(['error:YIR_API_KEY'])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' }, secrets: { YIR_API_KEY: 'y' } }))).toEqual([])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' } }))).toEqual(['error:NANOAPI_API_KEY'])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' }, secrets: { NANOAPI_API_KEY: 'n' } }))).toEqual([])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' } }))).toEqual(['warn:VIDEO_PROVIDER'])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' }, secrets: { YIR_API_KEY: 'y' } }))).toEqual(['warn:YIR_API_KEY', 'warn:VIDEO_PROVIDER'])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' } }))).toEqual(['warn:VIDEO_PROVIDER'])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' }, secrets: { NANOAPI_API_KEY: 'n' } }))).toEqual(['warn:NANOAPI_API_KEY', 'warn:VIDEO_PROVIDER'])
     expect(keys(ready({ vars: { VIDEO_PROVIDER: 'mock' } }))).toEqual(['error:VIDEO_PROVIDER'])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'opengen' } }))).toEqual(['error:OPENGEN_API_KEY', 'error:OPENGEN_BASE_URL'])
+    expect(keys(ready({ vars: { OPENGEN_BASE_URL: '', OPENGEN_STUB: '0' }, secrets: { OPENGEN_API_KEY: '' } }))).toEqual(['error:OPENGEN_API_KEY', 'error:OPENGEN_BASE_URL'])
     expect(
       keys(
         ready({
@@ -219,7 +222,7 @@ describe('doctor', () => {
 
   it('可上线的配置通过；缺 secret、未应用 migration、查询失败都报错', () => {
     expect(doctorKeys(deployable())).toEqual([])
-    expect(doctorKeys(deployable(), { secretNames: allSecrets.filter((n) => n !== 'FAL_KEY') })).toEqual(['error:FAL_KEY'])
+    expect(doctorKeys(deployable(), { secretNames: allSecrets.filter((n) => n !== 'OPENGEN_API_KEY') })).toEqual(['error:OPENGEN_API_KEY'])
     expect(doctorKeys(deployable(), { pendingMigrations: ['0008_order_reconcile.sql'] })).toEqual(['error:migrations'])
     // 读不到 secret 列表时只报一条，不把每个密钥都报成缺失
     expect(doctorKeys(deployable(), { secretNames: null, pendingMigrations: null })).toEqual(['error:secrets', 'error:migrations'])

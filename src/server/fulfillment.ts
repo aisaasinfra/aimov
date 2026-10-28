@@ -1,7 +1,7 @@
 import { site } from '#/config/site'
 import { storeOutputFromUrl } from './jobs'
 import { signedUploadUrl } from './media'
-import { notifyGenerationAccepted, notifyGenerationFinished } from './notifications'
+import { notifyGenerationAccepted, notifyGenerationFinished, notifyManualOrderOperators } from './notifications'
 import { sheetErrorText, upsertGenerationSheet, type SheetGenerationRow } from './sheets'
 import type { GenerationRow } from './types'
 import { ApiError, nowIso } from './util'
@@ -9,8 +9,8 @@ import { isManualProvider } from './video/types'
 
 export { resolveFulfillmentMode } from './fulfillment-mode'
 
-// 履行开关：收款不变。manual 扣积分后停在人工队列；auto 仍走现有视频渠道。
-// D1 generations 是账本。Google Sheet 只是人工操作面，写失败不回滚扣费。
+// 履行开关：收款不变。manual 扣积分后停在人工队列。auto 的新单走 OpenGen（见 auto-route）。
+// D1 generations 是账本和所有权。Google Sheet 只是人工镜像，写失败不回滚扣费，改表格也不会改所有权或终态。
 
 export function isPublicHttpsUrl(raw: string): URL | null {
   let url: URL
@@ -126,6 +126,8 @@ export async function acceptManualGeneration(env: Env, generationId: string) {
   try {
     await syncManualSheet(env, generationId, { status: 'queued', resultLink: '' })
     await notifyGenerationAccepted(env, generationId)
+    const operators = await notifyManualOrderOperators(env, generationId)
+    if (operators === 'none') await mergeProviderMeta(env, generationId, { operatorNotifyError: 'ADMIN_EMAILS 未配置' })
   } catch (error) {
     console.error('manual accept failed', generationId, error instanceof Error ? error.name : 'error')
   }

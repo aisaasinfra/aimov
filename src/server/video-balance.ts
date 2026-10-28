@@ -1,5 +1,5 @@
 import { cleanSecret } from './util'
-import { activeVideoProviderId, resolveEffectiveVideoProvider } from './video'
+import { describeAutoRoute } from './auto-route'
 import type { VideoProviderId } from './video/types'
 import { getSettings } from './settings'
 
@@ -31,11 +31,14 @@ function readBalance(provider: string, amount: unknown, currency: unknown): Bala
 
 async function providerForBalance(env: Env): Promise<VideoProviderId> {
   try {
-    if (env.DB && env.KV) return resolveEffectiveVideoProvider(env, await getSettings(env))
+    const settings = env.DB && env.KV ? await getSettings(env) : null
+    const route = describeAutoRoute(env, settings)
+    if (route.ok) return route.provider
   } catch (error) {
     console.error('[alert] video provider resolve failed', error instanceof Error ? error.message : String(error))
   }
-  return activeVideoProviderId(env)
+  // 日常 auto 解析失败时不要去查 fal / yir / nanoapi 余额。
+  return 'opengen'
 }
 
 export async function queryVideoBalance(env: Env, providerId?: VideoProviderId): Promise<BalanceQuery> {

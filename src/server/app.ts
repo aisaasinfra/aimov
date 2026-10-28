@@ -18,6 +18,8 @@ import { CSP_REPORT_PATH, summarizeCspReports } from './csp'
 import { exchangeGoogleCode, googleAuthRedirect, googleClientId, googleOAuthConfig, verifyGoogleIdToken } from './google'
 import { publicGeneration, publicOrder, rateLimit, readJson, requireUser, pageParams } from './http'
 import { acceptManualGeneration } from './fulfillment'
+import { describeAutoRoute } from './auto-route'
+import { resolveCreateComponent } from './components'
 import { resolveFulfillmentMode } from './fulfillment-mode'
 import { enqueueJob, failGeneration, handleDeadLetter, handleVideoJob } from './jobs'
 import { jobToken, serveR2Object, sniffImageType, verifyUploadSignature } from './media'
@@ -51,7 +53,7 @@ import { createTakedown, isBlockedMedia, parseTakedown, type TakedownInput } fro
 import { turnstileSiteKey, verifyTurnstile } from './turnstile'
 import type { AppContext, GenerationRow, OrderRow, UploadRow, UserRow } from './types'
 import { ApiError, constantTimeEqual, createId, isCheckConstraintError, isProduction, nowIso, randomToken, sha256Hex } from './util'
-import { resolveEffectiveVideoProvider } from './video'
+import { openGenStubEnabled, probeOpenGenReachability } from './video/opengen'
 
 const MAX_ACTIVE_JOBS_PER_USER = 3
 
@@ -318,7 +320,7 @@ app.post('/api/generations', async (c) => {
   const settings = await getSettings(c.env)
   assertOpen(settings, user)
   await rateLimit(c.env.GENERATE_LIMITER, user.id)
-  const body = await readJson<{ uploadId: string; durationId: string; mockOutcome: string; locale: string; templateId?: string }>(c)
+  const body = await readJson<Record<string, unknown> & { uploadId?: string; durationId?: string; mockOutcome?: string; locale?: string; templateId?: string }>(c)
   const requestedTemplate = typeof body.templateId === 'string' ? body.templateId.trim() : ''
   const template = requestedTemplate ? findVideoTemplate(requestedTemplate) : undefined
   if (requestedTemplate && !template) throw new ApiError(400, 'invalid_template')
@@ -341,12 +343,40 @@ app.post('/api/generations', async (c) => {
   await rememberLocale(c.env, user, body.locale)
 
   const templateId = template?.id ?? site.template.id
-  const fulfillmentMode = resolveFulfillmentMode(settings, templateId)
-  const providerId = fulfillmentMode === 'manual' ? 'manual' : resolveEffectiveVideoProvider(c.env, settings)
+  const fulfillmentMode = resolveFulfillmentMode(settings)
+  const componentDecision = resolveCreateComponent(body, fulfillmentMode)
+  if (!componentDecision.ok) throw new ApiError(componentDecision.status, componentDecision.code, componentDecision.message)
+
+  let providerId = 'manual'
+  let enqueue = false
+  const metaObject: Record<string, string> = {}
+  if (fulfillmentMode === 'manual') {
+    providerId = 'manual'
+    metaObject.fulfillment = 'manual'
+  } else {
+    const route = describeAutoRoute(c.env, settings)
+    if (!route.ok) throw new ApiError(route.status, route.code, route.message)
+    if (route.provider === 'opengen' && !openGenStubEnabled(c.env)) {
+      const reach = await probeOpenGenReachability(c.env)
+      if (reach === 'not_configured') throw new ApiError(503, 'provider_not_configured', 'OpenGen 未配置：需要 OPENGEN_BASE_URL 和 OPENGEN_API_KEY')
+      if (reach === 'unhealthy') throw new ApiError(503, 'opengen_unhealthy', 'OpenGen 已配置但不健康：鉴权失败')
+      if (reach === 'unreachable') {
+        providerId = 'manual'
+        metaObject.fulfillment = 'manual'
+        metaObject.fallback = 'unreachable_before_submit'
+      } else {
+        providerId = 'opengen'
+        metaObject.fulfillment = 'opengen'
+        enqueue = true
+      }
+    } else {
+      providerId = route.provider
+      metaObject.fulfillment = route.fulfillment
+      enqueue = true
+    }
+  }
   const mockOutcome = providerId === 'mock' && (body.mockOutcome === 'fail' || body.mockOutcome === 'hang') ? body.mockOutcome : null
   const scenePrompt = template ? templatePrompt(template, body.locale) : ''
-  const metaObject: Record<string, string> = {}
-  if (fulfillmentMode === 'manual') metaObject.fulfillment = 'manual'
   if (mockOutcome) metaObject.mockOutcome = mockOutcome
   if (scenePrompt) metaObject.scenePrompt = scenePrompt
   const meta = Object.keys(metaObject).length ? JSON.stringify(metaObject) : null
@@ -357,10 +387,24 @@ app.post('/api/generations', async (c) => {
       db
         .prepare(
           `INSERT INTO generations (id, user_id, template_id, duration_id, duration_seconds, credits_cost, upload_id,
-           status, provider, provider_meta, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
+           status, provider, provider_meta, component_id, component_version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(id, user.id, templateId, duration.id, duration.seconds, duration.credits, upload.id, providerId, meta, now, now),
+        .bind(
+          id,
+          user.id,
+          templateId,
+          duration.id,
+          duration.seconds,
+          duration.credits,
+          upload.id,
+          providerId,
+          meta,
+          componentDecision.component.id,
+          componentDecision.component.version,
+          now,
+          now,
+        ),
       ...ledgerStatements(db, {
         userId: user.id,
         delta: -duration.credits,
@@ -379,8 +423,9 @@ app.post('/api/generations', async (c) => {
     throw error
   }
 
-  if (fulfillmentMode === 'manual') {
+  if (!enqueue) {
     // 积分已经扣下。Sheet 和接单邮件失败只记在行上，不能把这次购买打成失败。
+    // 提交前 OpenGen 不可达时，也是这一行改人工，不扣第二次。
     await acceptManualGeneration(c.env, id)
   } else {
     try {
@@ -853,14 +898,23 @@ app.post('/api/webhooks/paypal', async (c) => {
   return c.json({ received: true, ...result })
 })
 
-// 视频服务商完成回调（fal、yir、nanoapi、opengen）：只当作“立即轮询”的信号，真实结果由 jobs.ts 按工单行上的 provider 拉取，
-// 所以只校验地址里的任务 token，不验服务商签名头
+// 视频服务商完成回调：丢掉正文，只当作“去轮询”的信号。正文本身不能标成功，也不能当成成片。
+// 终态或已退款的行不再排轮询。没有数据库时仍只排一次 poll（单测没有 D1）。
 for (const provider of ['fal', 'yir', 'nanoapi', 'opengen']) {
   app.post(`/api/webhooks/${provider}`, async (c) => {
+    await c.req.text()
     const generationId = c.req.query('gen') ?? ''
     const token = c.req.query('token') ?? ''
     if (!generationId || !constantTimeEqual(token, await jobToken(c.env, generationId))) {
       throw new WebhookVerificationError(`invalid ${provider} job token`)
+    }
+    if (c.env.DB) {
+      const row = await c.env.DB.prepare('SELECT status, refunded FROM generations WHERE id = ?')
+        .bind(generationId)
+        .first<{ status: string; refunded: number }>()
+      if (row && (row.status === 'succeeded' || row.status === 'failed' || row.refunded)) {
+        return c.json({ received: true, ignored: 'terminal' })
+      }
     }
     await enqueueJob(c.env, { kind: 'poll', generationId })
     return c.json({ received: true })

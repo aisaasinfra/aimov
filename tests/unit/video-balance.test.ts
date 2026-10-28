@@ -66,10 +66,24 @@ describe('queryVideoBalance', () => {
     expect(yirCalls).toHaveLength(1)
   })
 
-  it('HTTP 非 2xx 抛出，由告警记日志', async () => {
+  it('日常 fal 环境不查 fal；应急开关打开且 OpenGen 未配置时，HTTP 非 2xx 仍抛出', async () => {
+    const daily = stubFetch(() => {
+      throw new Error('daily auto must not call fal')
+    })
+    expect(await fetchVideoBalance({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_test', EMERGENCY_VIDEO_PROVIDER: '' } as unknown as Env)).toBeNull()
+    expect(daily).toEqual([])
+
     stubFetch(() => new Response('nope', { status: 502 }))
-    await expect(fetchVideoBalance({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_test' } as unknown as Env)).rejects.toThrow(
-      'video balance HTTP 502',
-    )
+    await expect(
+      fetchVideoBalance({
+        APP_ENV: 'production',
+        VIDEO_PROVIDER: 'opengen',
+        EMERGENCY_VIDEO_PROVIDER: 'fal',
+        FAL_KEY: 'fal_test',
+        OPENGEN_BASE_URL: '',
+        OPENGEN_API_KEY: '',
+        OPENGEN_STUB: '0',
+      } as unknown as Env),
+    ).rejects.toThrow('video balance HTTP 502')
   })
 })

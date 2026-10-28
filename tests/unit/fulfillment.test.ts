@@ -20,13 +20,12 @@ const pemOf = (bytes: ArrayBuffer) => {
 }
 
 describe('履行方式', () => {
-  it('缺省和坏覆盖都是 manual；模板命中优先于站点', () => {
-    expect(resolveFulfillmentMode({}, 'new-york')).toBe('manual')
-    expect(resolveFulfillmentMode({ fulfillmentMode: 'auto' }, 'new-york')).toBe('auto')
-    expect(resolveFulfillmentMode({ fulfillmentMode: 'nope' }, 'new-york')).toBe('manual')
-    expect(resolveFulfillmentMode({ fulfillmentMode: 'manual', fulfillmentModeByTemplate: '{"paris":"auto"}' }, 'paris')).toBe('auto')
-    expect(resolveFulfillmentMode({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' }, 'new-york')).toBe('auto')
-    expect(resolveFulfillmentMode({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{bad' }, 'paris')).toBe('auto')
+  it('全站只有一个开关；模板覆盖不再改变结果', () => {
+    expect(resolveFulfillmentMode({})).toBe('manual')
+    expect(resolveFulfillmentMode({ fulfillmentMode: 'auto' })).toBe('auto')
+    expect(resolveFulfillmentMode({ fulfillmentMode: 'nope' })).toBe('manual')
+    expect(resolveFulfillmentMode({ fulfillmentMode: 'manual' })).toBe('manual')
+    expect(resolveFulfillmentMode({ fulfillmentMode: 'auto' })).toBe('auto')
   })
 
   it('接单邮件只说在队列里', () => {
@@ -201,15 +200,13 @@ describe('创建生成任务', () => {
     expect(sqlite.prepare(`SELECT COUNT(*) AS n FROM email_outbox`).get()).toEqual({ n: 0 })
   })
 
-  it('按模板覆盖：paris 自动，其它模板人工', async () => {
+  it('全站 manual 时每个模板都人工，库存的按模板 JSON 不生效', async () => {
     storeSetting('fulfillmentMode', 'manual')
     storeSetting('fulfillmentModeByTemplate', JSON.stringify({ paris: 'auto' }))
     expect((await create('paris')).status).toBe(201)
     expect((await create('new-york')).status).toBe(201)
-    const rows = generations()
-    expect(rows.map((row) => row.provider).sort()).toEqual(['manual', 'mock'])
-    expect(sent).toHaveLength(1)
-    expect(sent[0]).toMatchObject({ kind: 'submit' })
+    expect(generations().map((row) => row.provider)).toEqual(['manual', 'manual'])
+    expect(sent).toEqual([])
   })
 
   it('Sheet 可写时追加一行；接口仍 201', async () => {

@@ -22,6 +22,7 @@
     "SITE_URL": "https://video-template-staging.SUBDOMAIN.workers.dev",
     "PAYMENT_PROVIDER": "waffo",
     "VIDEO_PROVIDER": "fal",
+    "EMERGENCY_VIDEO_PROVIDER": "",
     "OPENGEN_BASE_URL": "",
     "OPENGEN_STUB": "0",
     "ADMIN_EMAILS": "admin@example.com",

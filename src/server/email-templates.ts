@@ -8,6 +8,7 @@ import type { AlertKind } from './alerts'
 export interface TemplateParams {
   generation_succeeded: { generationId: string; expiresAt: string | null }
   generation_accepted: { generationId: string }
+  manual_order_operator: { generationId: string; templateId: string }
   generation_failed: { generationId: string; credits: number }
   order_paid: { orderId: string; credits: number; amount: string }
   takedown_received: { reportId: string; dueAt: string }
@@ -20,7 +21,7 @@ export interface TemplateParams {
 }
 
 export type EmailTemplate = keyof TemplateParams
-type AdminTemplate = 'admin_takedown' | 'admin_contact' | 'admin_alert'
+type AdminTemplate = 'admin_takedown' | 'admin_contact' | 'admin_alert' | 'manual_order_operator'
 type UserTemplate = Exclude<EmailTemplate, AdminTemplate>
 
 export interface RenderedEmail {
@@ -573,6 +574,17 @@ const ADMIN_RENDERERS: { [K in AdminTemplate]: Render<K> } = {
     paragraphs: [`来自：${p.email}（直接回复本邮件即可回复对方）`, p.message],
     cta: { label: '在后台查看', url: `${ctx.siteUrl}/admin/messages` },
     replyTo: p.email,
+  }),
+
+  manual_order_operator: (p, ctx) => ({
+    subject: `[${brand}] 新的人工生成单：${p.generationId}`,
+    heading: '有新的人工单要处理',
+    paragraphs: [
+      `生成单 ${p.generationId}，模板 ${p.templateId}。`,
+      '这是给履约负责人的通知，不是用户的排队邮件。',
+      '请在后台填写成品 https 地址，或标记失败。完成时间未定，这封邮件不代表时限。',
+    ],
+    cta: { label: '去后台处理', url: `${ctx.siteUrl}/admin/generations` },
   }),
 
   admin_alert: (p, ctx) => {

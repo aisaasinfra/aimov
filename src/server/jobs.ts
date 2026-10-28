@@ -6,8 +6,10 @@ import { reconcilePendingOrders } from './reconcile'
 import type { GenerationRow, UploadRow, VideoJobMessage } from './types'
 import { sweepExpiredMedia } from './retention'
 import { grantDueSubscriptions } from './subscriptions'
+import { decideOpenGenFallback, type FallbackLookup, type SubmitEvidence } from './opengen-fallback'
 import { nowIso } from './util'
 import { getVideoProvider } from './video'
+import { lookupOpenGenJob, observeOpenGenSubmit } from './video/opengen'
 import { isManualProvider, VideoProviderError, type ExecutableVideoProviderId } from './video/types'
 
 const JOB_TIMEOUT_MINUTES = 45
@@ -101,6 +103,8 @@ export async function handleVideoJob(env: Env, message: VideoJobMessage) {
     .bind(message.generationId)
     .first<GenerationRow>()
   if (!generation) return
+  // 终态和已退款不再拉取、不再改状态、不再二次退款。迟到的回调同样走这里。
+  if (generation.status === 'succeeded' || generation.status === 'failed' || generation.refunded) return
   // 人工单不进厂商。误投的队列消息直接丢掉，不能 getVideoProvider('manual')。
   if (isManualProvider(generation.provider)) return
   if (message.kind === 'submit') await submitGeneration(env, generation)
@@ -127,6 +131,10 @@ async function resumeAccepted(env: Env, generation: GenerationRow) {
 }
 
 async function submitGeneration(env: Env, generation: GenerationRow) {
+  if (generation.provider === 'opengen') {
+    await submitOpenGenGeneration(env, generation)
+    return
+  }
   // provider_request_id 一旦写下，这次接受就已经发生。队列重投只入 poll。
   if (generation.provider_request_id) {
     await resumeAccepted(env, generation)
@@ -194,6 +202,11 @@ async function submitGeneration(env: Env, generation: GenerationRow) {
 }
 
 async function pollGeneration(env: Env, generation: GenerationRow) {
+  if (generation.status === 'succeeded' || generation.status === 'failed' || generation.refunded) return
+  if (generation.provider === 'opengen' && !generation.provider_request_id) {
+    await reconcileOpenGenGeneration(env, generation)
+    return
+  }
   if (generation.status !== 'processing' || !generation.provider_request_id) return
   // 轮询同样只读行上的 provider，切换渠道不影响已在处理的工单。
   const provider = getVideoProvider(env, generation.provider)
@@ -320,6 +333,9 @@ export async function runScheduledMaintenance(env: Env) {
       await enqueueJob(env, { kind: 'submit', generationId: generation.id })
     } else if (generation.provider_request_id) {
       await enqueueJob(env, { kind: 'poll', generationId: generation.id })
+    } else if (openGenReconcilePending(generation)) {
+      // 提交结果还不明：只对账，不要放回 queued 再 POST 一次。
+      await enqueueJob(env, { kind: 'poll', generationId: generation.id })
     } else if (generation.attempts < 3) {
       // 抢占后、拿到 request id 前 Worker 中断：放回队列重新提交
       await db
@@ -365,4 +381,191 @@ function parseMeta(value: string | null): Record<string, unknown> {
 
 function minutesSince(iso: string) {
   return (Date.now() - Date.parse(iso)) / 60_000
+}
+
+function openGenReconcilePending(generation: GenerationRow): boolean {
+  if (generation.provider !== 'opengen' || generation.provider_request_id) return false
+  const meta = parseMeta(generation.provider_meta)
+  return meta.pendingReview === true || meta.submitStarted === true
+}
+
+function asSubmitEvidence(value: unknown): SubmitEvidence {
+  if (value === 'not_sent' || value === 'unknown' || value === 'rejected_before_store' || value === 'accepted') return value
+  return 'unknown'
+}
+
+function absentStamps(meta: Record<string, unknown>): number[] {
+  if (!Array.isArray(meta.absentAtMs)) return []
+  return meta.absentAtMs.filter((item): item is number => typeof item === 'number' && Number.isFinite(item)).slice(-8)
+}
+
+async function saveOpenGenMeta(env: Env, generationId: string, meta: Record<string, unknown>) {
+  await env.DB.prepare(
+    `UPDATE generations SET provider_meta = ?, updated_at = ?
+     WHERE id = ? AND provider = 'opengen' AND provider_request_id IS NULL AND status IN ('queued', 'processing')`,
+  )
+    .bind(JSON.stringify(meta), nowIso(), generationId)
+    .run()
+}
+
+async function recordOpenGenTask(env: Env, generation: GenerationRow, taskId: string, meta: Record<string, unknown>) {
+  const next: Record<string, unknown> = { ...meta, fulfillment: 'opengen', submitEvidence: 'accepted' }
+  delete next.pendingReview
+  delete next.reviewReason
+  const now = nowIso()
+  const saved = await env.DB.prepare(
+    `UPDATE generations SET provider_request_id = ?, provider_meta = ?, status = 'processing', started_at = COALESCE(started_at, ?), updated_at = ?
+     WHERE id = ? AND provider = 'opengen' AND provider_request_id IS NULL AND refunded = 0 AND status IN ('queued', 'processing')`,
+  )
+    .bind(taskId, JSON.stringify(next), now, now, generation.id)
+    .run()
+  if (!saved.meta.changes) {
+    await env.DB.prepare(
+      `UPDATE generations SET provider = 'opengen', provider_request_id = ?, provider_meta = ?, status = 'processing', started_at = COALESCE(started_at, ?), updated_at = ?
+       WHERE id = ? AND provider_request_id IS NULL AND refunded = 0 AND status IN ('queued', 'processing')`,
+    )
+      .bind(taskId, JSON.stringify(next), now, now, generation.id)
+      .run()
+  }
+  await enqueuePoll(env, { ...generation, provider: 'opengen' })
+}
+
+async function handoffOpenGenToManual(env: Env, generation: GenerationRow, reason: string, meta: Record<string, unknown>) {
+  const next: Record<string, unknown> = { ...meta, fulfillment: 'manual', fallback: reason }
+  delete next.pendingReview
+  delete next.reviewReason
+  delete next.submitStarted
+  const saved = await env.DB.prepare(
+    `UPDATE generations SET provider = 'manual', status = 'queued', provider_meta = ?, updated_at = ?
+     WHERE id = ? AND provider = 'opengen' AND provider_request_id IS NULL AND refunded = 0 AND status IN ('queued', 'processing')`,
+  )
+    .bind(JSON.stringify(next), nowIso(), generation.id)
+    .run()
+  if (!saved.meta.changes) return
+  const { acceptManualGeneration } = await import('./fulfillment')
+  await acceptManualGeneration(env, generation.id)
+}
+
+async function buildOpenGenInput(env: Env, generation: GenerationRow) {
+  const duration = findDuration(generation.duration_id)
+  const upload = await env.DB.prepare('SELECT * FROM uploads WHERE id = ?').bind(generation.upload_id).first<UploadRow>()
+  if (!duration || !upload || upload.expired_at) return null
+  const template = findVideoTemplate(generation.template_id)
+  const sourceFile = templateSourceFile(template, duration)
+  const webhookUrl = new URL('/api/webhooks/opengen', env.SITE_URL)
+  webhookUrl.searchParams.set('gen', generation.id)
+  webhookUrl.searchParams.set('token', await jobToken(env, generation.id))
+  return {
+    generationId: generation.id,
+    durationSeconds: generation.duration_seconds,
+    imageUrl: await signedUploadUrl(env, upload.id, Date.parse(generation.created_at)),
+    sourceVideoUrl: templateSourceUrl(env, sourceFile),
+    sourceVideoKey: `templates/${sourceFile}`,
+    webhookUrl: webhookUrl.toString(),
+    meta: parseMeta(generation.provider_meta),
+  }
+}
+
+async function reconcileOpenGenGeneration(env: Env, generation: GenerationRow) {
+  const fresh = await env.DB.prepare('SELECT * FROM generations WHERE id = ?').bind(generation.id).first<GenerationRow>()
+  if (!fresh || fresh.status === 'succeeded' || fresh.status === 'failed' || fresh.refunded) return
+  if (fresh.provider !== 'opengen') return
+  if (fresh.provider_request_id) {
+    await resumeAccepted(env, fresh)
+    return
+  }
+  const meta = parseMeta(fresh.provider_meta)
+  if (meta.submitStarted !== true && meta.pendingReview !== true) return
+  const lookup = await lookupOpenGenJob(env, fresh.id)
+  const now = Date.now()
+  const absents = absentStamps(meta)
+  const lookups: FallbackLookup[] = absents.map((atMs) => ({ kind: 'absent', atMs }))
+  if (lookup.kind === 'found') lookups.push({ kind: 'found', atMs: now, taskId: lookup.taskId })
+  else if (lookup.kind === 'absent') {
+    absents.push(now)
+    meta.absentAtMs = absents.slice(-8)
+    lookups.push({ kind: 'absent', atMs: now })
+  } else lookups.push({ kind: 'unclear', atMs: now })
+  const decision = decideOpenGenFallback({ taskIdRecorded: false, submit: asSubmitEvidence(meta.submitEvidence), lookups })
+  if (decision.action === 'stay') {
+    if (decision.taskId) await recordOpenGenTask(env, fresh, decision.taskId, meta)
+    else await enqueueJob(env, { kind: 'poll', generationId: fresh.id }, 20)
+    return
+  }
+  if (decision.action === 'manual') {
+    await handoffOpenGenToManual(env, fresh, decision.reason, meta)
+    return
+  }
+  meta.pendingReview = true
+  meta.reviewReason = decision.reason
+  meta.fulfillment = 'opengen'
+  await saveOpenGenMeta(env, fresh.id, meta)
+  await enqueueJob(env, { kind: 'poll', generationId: fresh.id }, 20)
+}
+
+async function submitOpenGenGeneration(env: Env, generation: GenerationRow) {
+  if (generation.provider_request_id) {
+    await resumeAccepted(env, generation)
+    return
+  }
+  if (generation.status === 'succeeded' || generation.status === 'failed' || generation.refunded) return
+  const existing = parseMeta(generation.provider_meta)
+  if (existing.submitStarted === true || existing.pendingReview === true) {
+    await reconcileOpenGenGeneration(env, generation)
+    return
+  }
+  if (generation.status !== 'queued') return
+
+  const claimedMeta: Record<string, unknown> = {
+    ...existing,
+    submitStarted: true,
+    pendingReview: true,
+    submitEvidence: 'unknown',
+    fulfillment: 'opengen',
+    reviewReason: 'submit_unknown',
+  }
+  const claimed = await env.DB.prepare(
+    `UPDATE generations SET status = 'processing', attempts = attempts + 1, provider_meta = ?, updated_at = ?
+     WHERE id = ? AND status = 'queued' AND provider = 'opengen' AND provider_request_id IS NULL`,
+  )
+    .bind(JSON.stringify(claimedMeta), nowIso(), generation.id)
+    .run()
+  if (!claimed.meta.changes) return
+
+  let input: Awaited<ReturnType<typeof buildOpenGenInput>>
+  try {
+    input = await buildOpenGenInput(env, generation)
+  } catch (error) {
+    await env.DB.prepare(
+      `UPDATE generations SET status = 'queued', provider_meta = ?, updated_at = ?
+       WHERE id = ? AND status = 'processing' AND provider = 'opengen' AND provider_request_id IS NULL`,
+    )
+      .bind(generation.provider_meta, nowIso(), generation.id)
+      .run()
+    throw error
+  }
+  if (!input) {
+    await failGeneration(env, generation.id, 'invalid_input', 'Upload or duration no longer exists')
+    return
+  }
+
+  const observed = await observeOpenGenSubmit(env, { ...input, meta: existing })
+  if (observed.kind === 'accepted') {
+    const merged: Record<string, unknown> = { ...claimedMeta, ...observed.meta, fulfillment: 'opengen', submitEvidence: 'accepted' }
+    delete merged.pendingReview
+    delete merged.reviewReason
+    await recordOpenGenTask(env, generation, observed.requestId, merged)
+    return
+  }
+  if (observed.kind === 'unhealthy' || observed.kind === 'not_configured' || observed.kind === 'failed') {
+    const code = observed.kind === 'not_configured' ? 'provider_not_configured' : observed.code
+    const message = observed.kind === 'unhealthy' ? 'OpenGen 已配置但不健康：鉴权失败' : observed.message
+    await failGeneration(env, generation.id, code, message)
+    return
+  }
+  claimedMeta.submitEvidence = observed.kind === 'rejected_before_store' ? 'rejected_before_store' : 'unknown'
+  claimedMeta.reviewReason = 'submit_unknown'
+  await saveOpenGenMeta(env, generation.id, claimedMeta)
+  const refreshed = await env.DB.prepare('SELECT * FROM generations WHERE id = ?').bind(generation.id).first<GenerationRow>()
+  if (refreshed) await reconcileOpenGenGeneration(env, refreshed)
 }

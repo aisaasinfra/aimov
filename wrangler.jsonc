@@ -17,8 +17,10 @@
     "SITE_URL": "http://localhost:3000",
     // waffo | paypal | dodo | stripe | mock（mock 只允许非 production）。产品默认通道是 Waffo + PayPal.cn。
     "PAYMENT_PROVIDER": "mock",
-    // fal | yir | nanoapi | opengen | mock（mock 只允许非 production；本地默认 mock）
+    // 日常 auto 不读这个值来选 fal / yir / nanoapi。那些值不是目标态 auto。本地默认 mock，只给 development / preview。
     "VIDEO_PROVIDER": "mock",
+    // 应急开关，默认关。只能是 fal、yir、nanoapi 之一，且不能与 OpenGen 同时配置。空着表示关闭。收口后应删掉。
+    "EMERGENCY_VIDEO_PROVIDER": "",
     // OpenGen 连接地址（公网 HTTPS 或隧道）。空着表示未配置。厂商 Key 不放这里。
     "OPENGEN_BASE_URL": "",
     // 1 = 进程内联调 stub（仅 development / preview；staging 与 production 拒绝）。不是真实厂商验收。

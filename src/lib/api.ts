@@ -84,6 +84,8 @@ export type Generation = {
   expiresAt: string | null
   // 公开分享链接 /v/<shareId>，未分享时为 null
   shareId: string | null
+  componentId?: string | null
+  componentVersion?: number | null
 }
 
 export type Order = {
