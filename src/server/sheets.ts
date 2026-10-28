@@ -135,6 +135,17 @@ function cellsOf(row: SheetGenerationRow): string[] {
   return [row.createdAt, row.email, row.templateId, row.userImageUrl, row.status, row.resultLink, row.generationId]
 }
 
+// 表头单元格 generation_id 不是数据 id。返回除第一处之外的 0-based 行号，从大到小，方便按序号删除。
+export function duplicateRowIndexes(values: unknown[][], generationId: string, startRow: number): number[] {
+  if (!generationId || generationId === 'generation_id') return []
+  const hits: number[] = []
+  for (let i = 0; i < values.length; i++) {
+    const cell = values[i]?.[6]
+    if (cell === generationId) hits.push(startRow - 1 + i)
+  }
+  return hits.slice(1).sort((a, b) => b - a)
+}
+
 function rangeStartRow(range: string | undefined): number {
   if (!range) return 1
   const body = range.includes('!') ? range.slice(range.lastIndexOf('!') + 1) : range
@@ -190,6 +201,8 @@ export async function upsertGenerationSheet(env: Env, row: SheetGenerationRow): 
       body: JSON.stringify({ values: [payload] }),
     })
     await sheetResult(updated, 'sheets_api_failed')
+    const extras = duplicateRowIndexes(values, row.generationId, start)
+    if (extras.length) await deleteSheetRows(config, token, extras)
     return 'updated'
   }
   const empty = values.length === 0
@@ -200,6 +213,30 @@ export async function upsertGenerationSheet(env: Env, row: SheetGenerationRow): 
   })
   await sheetResult(appended, 'sheets_api_failed')
   return 'appended'
+}
+
+async function deleteSheetRows(config: SheetsConfig, token: string, indexes: number[]) {
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.spreadsheetId)}?fields=sheets.properties(sheetId)`
+  let listed: Response
+  try {
+    listed = await fetch(metaUrl, { headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    throw new SheetError('sheets_api_failed', 'spreadsheet_unreachable')
+  }
+  await sheetResult(listed, 'sheets_api_failed')
+  const meta = (await listed.json()) as { sheets?: Array<{ properties?: { sheetId?: number } }> }
+  const sheetId = meta.sheets?.[0]?.properties?.sheetId
+  if (typeof sheetId !== 'number') return
+  const deleted = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(config.spreadsheetId)}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      requests: indexes.map((index) => ({
+        deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: index, endIndex: index + 1 } },
+      })),
+    }),
+  })
+  await sheetResult(deleted, 'sheets_api_failed')
 }
 
 export function sheetErrorText(error: unknown): string {

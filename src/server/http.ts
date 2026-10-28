@@ -68,6 +68,8 @@ export function publicGeneration(g: GenerationRow) {
     removed: Boolean(g.removed_at),
     expiresAt: g.output_r2_key ? outputExpiresAt(g.completed_at) : null,
     shareId: g.share_id,
+    componentId: g.component_id,
+    componentVersion: g.component_version,
   }
 }
 

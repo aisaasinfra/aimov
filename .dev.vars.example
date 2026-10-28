@@ -14,13 +14,11 @@ STRIPE_WEBHOOK_SECRET=
 PAYPAL_CLIENT_ID=
 PAYPAL_CLIENT_SECRET=
 PAYPAL_WEBHOOK_ID=
-# fal.ai 视频生成
+# fal / yir / nanoapi 只给默认关闭的应急开关，或创建时已经走这些厂商的旧工单。日常 auto 不要把它们放进生产 Worker。
 FAL_KEY=
-# yir.ai 视频网关（VIDEO_PROVIDER=yir 时必填）
 YIR_API_KEY=
-# NanoAPI 视频服务（VIDEO_PROVIDER=nanoapi 时必填；本地 mock 不需要）
 NANOAPI_API_KEY=
-# OpenGen 连接鉴权（后台切到 opengen 或 VIDEO_PROVIDER=opengen 时需要）。不是厂商 Key，厂商 Key 留在 OpenGen 主机。
+# OpenGen 连接鉴权（日常 auto）。每个部署用自己的 ogsk_。不是厂商 Key，厂商 Key 留在 OpenGen 主机。
 OPENGEN_API_KEY=
 # 图片审核（MODERATION_PROVIDER=openai 时必填）
 OPENAI_API_KEY=

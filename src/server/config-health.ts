@@ -18,6 +18,8 @@ export interface ConfigInput {
   // 在售的订阅套餐 id（sellingPlans，订阅开关关掉时为空），同样要在 *_PRODUCTS 里有商品
   planIds?: readonly string[]
   siteDomain: string
+  // doctor 在没核对或查不到 secret 列表时，会把每个名字都当成已配置。这时不要把厂商密钥报成“确实在 Worker 上”。
+  secretsAssumed?: boolean
 }
 
 // .dev.vars.example 里的占位值：模板公开后人人都知道，生产环境不能用
@@ -172,27 +174,77 @@ export function checkConfig(input: ConfigInput): ConfigIssue[] {
     if (!production && live) warn(envKey, `${envKey} 是正式模式，但 APP_ENV 不是 production：预发应使用 test 店铺`)
   }
 
+  // 日常 auto 只认 OpenGen。下面的规则是内联的，本文件不能 import。
+  // 没有 error 也不等于生产收口完成，更不能把隧道、本机或 stub 说成④就绪。
   const video = vars('VIDEO_PROVIDER')
-  if (video === 'mock') error('VIDEO_PROVIDER', 'VIDEO_PROVIDER=mock：生产环境提交生成会返回 503')
-  else if (!VIDEO_SECRETS[video]) error('VIDEO_PROVIDER', `未知的 VIDEO_PROVIDER=${video || '(空)'}，可选 fal、yir、nanoapi、opengen`)
-  else {
-    requireSecrets(VIDEO_SECRETS[video], `${video} 视频生成`)
-    if (video === 'opengen') {
-      // 与 src/server/video/opengen.ts 的 https 规则对齐。本文件不能 import。
-      const base = vars('OPENGEN_BASE_URL')
-      let baseHost: string | null = null
-      let baseUrl: URL | null = null
-      try {
-        baseUrl = base ? new URL(base) : null
-        baseHost = baseUrl?.hostname ?? null
-      } catch {
-        baseHost = null
-      }
-      if (!base || !baseHost || !baseUrl || baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search) {
-        error('OPENGEN_BASE_URL', 'OPENGEN_BASE_URL 未配置或不是不含密钥的 https 地址：Worker 必须能访问该端点（公网 HTTPS 或隧道）。这是连接信息，不是厂商 Key')
-      }
-      if (vars('OPENGEN_STUB') === '1') error('OPENGEN_STUB', 'OPENGEN_STUB=1：联调 stub 不能用于 staging 或 production')
+  const emergency = vars('EMERGENCY_VIDEO_PROVIDER')
+  const emergencyIds = ['fal', 'yir', 'nanoapi']
+  const vendorSecretNames = [
+    ['fal', 'FAL_KEY'],
+    ['yir', 'YIR_API_KEY'],
+    ['nanoapi', 'NANOAPI_API_KEY'],
+  ] as const
+  const secretPresent = (name: string) => {
+    const value = input.secrets[name]
+    if (value === true) return true
+    return Boolean(text(typeof value === 'string' ? value : undefined))
+  }
+  const opengenConfigured = Boolean(vars('OPENGEN_BASE_URL') || secretPresent('OPENGEN_API_KEY') || vars('OPENGEN_STUB') === '1')
+  const baseClass = (raw: string) => {
+    let url: URL | null = null
+    try {
+      url = raw ? new URL(raw) : null
+    } catch {
+      url = null
     }
+    if (!url) return 'invalid'
+    const host = url.hostname.toLowerCase()
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost') || host.endsWith('.local')) return 'local'
+    if (/trycloudflare\.com|ngrok|loca\.lt|localhost\.run|localtunnel/i.test(host)) return 'tunnel'
+    return 'public'
+  }
+
+  if (emergency && !emergencyIds.includes(emergency)) error('EMERGENCY_VIDEO_PROVIDER', '应急开关 EMERGENCY_VIDEO_PROVIDER 无效')
+  else if (emergency && opengenConfigured) error('EMERGENCY_VIDEO_PROVIDER', '应急开关与 OpenGen 同时配置，已失败关闭。不是未配置。')
+  else if (emergency) {
+    const secretName = emergency === 'fal' ? 'FAL_KEY' : emergency === 'yir' ? 'YIR_API_KEY' : 'NANOAPI_API_KEY'
+    if (!secretPresent(secretName)) error(secretName, `应急开关指向 ${emergency}，但 ${secretName} 未配置`)
+    warn('EMERGENCY_VIDEO_PROVIDER', `应急开关已打开（${emergency}），只作用于新订单，不是日常 auto。`)
+    if (!input.secretsAssumed) {
+      for (const [id, name] of vendorSecretNames) {
+        if (id !== emergency && secretPresent(name)) warn(name, `${name} 仍在 Worker 上。应急窗口里最多一个站内厂商。`)
+      }
+    }
+  } else if (!input.secretsAssumed) {
+    for (const [, name] of vendorSecretNames) {
+      if (secretPresent(name)) warn(name, `${name} 仍在 Worker 上。日常 auto 不应携带厂商密钥，应急开关当前关闭。`)
+    }
+  }
+
+  if (video === 'mock') error('VIDEO_PROVIDER', 'VIDEO_PROVIDER=mock：生产环境提交生成会返回 503')
+  else if (video === 'opengen') {
+    requireSecrets(VIDEO_SECRETS.opengen, 'OpenGen 视频生成')
+    const base = vars('OPENGEN_BASE_URL')
+    let baseHost: string | null = null
+    let baseUrl: URL | null = null
+    try {
+      baseUrl = base ? new URL(base) : null
+      baseHost = baseUrl?.hostname ?? null
+    } catch {
+      baseHost = null
+    }
+    if (!base || !baseHost || !baseUrl || baseUrl.protocol !== 'https:' || baseUrl.username || baseUrl.password || baseUrl.search) {
+      error('OPENGEN_BASE_URL', 'OPENGEN_BASE_URL 未配置或不是不含密钥的 https 地址：Worker 必须能访问该端点。这是连接信息，不是厂商 Key')
+    }
+    if (vars('OPENGEN_STUB') === '1') error('OPENGEN_STUB', 'OPENGEN_STUB=1：联调 stub 不能用于 staging 或 production')
+  } else if (video === 'fal' || video === 'yir' || video === 'nanoapi') {
+    warn('VIDEO_PROVIDER', `VIDEO_PROVIDER=${video} 不是目标态 auto。日常 auto 只提交 OpenGen，不因此要求厂商密钥。`)
+  } else error('VIDEO_PROVIDER', `未知的 VIDEO_PROVIDER=${video || '(空)'}。日常 auto 应为 opengen`)
+
+  const openGenBase = vars('OPENGEN_BASE_URL')
+  const hostClass = baseClass(openGenBase)
+  if (openGenBase && (hostClass === 'local' || hostClass === 'tunnel')) {
+    warn('OPENGEN_BASE_URL', 'OPENGEN_BASE_URL 指向本机或隧道。这不是生产就绪，也不是④。')
   }
 
   const moderation = vars('MODERATION_PROVIDER')

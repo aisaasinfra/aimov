@@ -51,27 +51,26 @@ describe('后台提交的运营参数', () => {
       }
       throw new Error('expected invalid_setting')
     }
-    expect(rejected('production')).toContain('fal')
+    expect(rejected('production')).toContain('opengen')
     expect(rejected('staging')).toContain('opengen')
     expect(rejected('production')).not.toContain('mock')
+    expect(rejected('production')).not.toContain('fal')
     expect(invalid({ videoProvider: 'manual' })).toContain('当前视频生成渠道')
   })
 
-  it('履行方式默认 manual；按模板覆盖只接受 manual 或 auto', () => {
+  it('履行方式默认 manual；没有按模板分轨', () => {
     expect(DEFAULT_SETTINGS.fulfillmentMode).toBe('manual')
-    expect(DEFAULT_SETTINGS.fulfillmentModeByTemplate).toBe('')
+    expect(DEFAULT_SETTINGS).not.toHaveProperty('fulfillmentModeByTemplate')
     expect(parseSettingsPatch({ fulfillmentMode: 'auto' })).toEqual({ fulfillmentMode: 'auto' })
-    expect(parseSettingsPatch({ fulfillmentModeByTemplate: '{ "new-york" : "auto" }' })).toEqual({ fulfillmentModeByTemplate: '{ "new-york" : "auto" }' })
     expect(invalid({ fulfillmentMode: 'sheet' })).toContain('生成履行方式')
-    expect(invalid({ fulfillmentModeByTemplate: '{"new-york":"fal"}' })).toContain('JSON')
-    expect(invalid({ fulfillmentModeByTemplate: '[]' })).toContain('JSON')
-    expect(invalid({ fulfillmentModeByTemplate: 'not-json' })).toContain('JSON')
-    expect(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{bad' })).toMatchObject({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '' })
+    expect(invalid({ fulfillmentModeByTemplate: '{"paris":"auto"}' })).toContain('未知参数')
+    expect(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' })).toMatchObject({ fulfillmentMode: 'auto' })
+    expect(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' })).not.toHaveProperty('fulfillmentModeByTemplate')
     expect(mergeSettings({}).fulfillmentMode).toBe('manual')
-    expect(resolveFulfillmentMode(mergeSettings({}), 'new-york')).toBe('manual')
-    expect(resolveFulfillmentMode(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' }), 'paris')).toBe('manual')
-    expect(resolveFulfillmentMode(mergeSettings({ fulfillmentMode: 'auto', fulfillmentModeByTemplate: '{"paris":"manual"}' }), 'new-york')).toBe('auto')
+    expect(resolveFulfillmentMode(mergeSettings({}))).toBe('manual')
+    expect(resolveFulfillmentMode(mergeSettings({ fulfillmentMode: 'auto' }))).toBe('auto')
     expect(settingFields().some((field) => field.key === 'fulfillmentMode' && field.kind === 'enum')).toBe(true)
+    expect(settingFields().map((field) => field.key as string)).not.toContain('fulfillmentModeByTemplate')
     const base = { VIDEO_PROVIDER: 'fal' } as unknown as Env
     expect(settingMatchesDefault('fulfillmentMode', 'manual', base)).toBe(true)
     expect(settingMatchesDefault('fulfillmentMode', 'auto', base)).toBe(false)
@@ -130,10 +129,10 @@ describe('存值合并', () => {
     expect(mergeSettings({ videoProvider: 'opengen' })).not.toHaveProperty('videoProvider')
   })
 
-  it('渠道等于 VIDEO_PROVIDER 时算默认，应删覆盖；其它字段仍对照 site.ts', () => {
+  it('日常渠道默认是 OpenGen，不是环境里的 fal；其它字段仍对照 site.ts', () => {
     const base = { VIDEO_PROVIDER: 'fal', APP_ENV: 'production' } as unknown as Env
-    expect(settingMatchesDefault('videoProvider', 'fal', base)).toBe(true)
-    expect(settingMatchesDefault('videoProvider', 'opengen', base)).toBe(false)
+    expect(settingMatchesDefault('videoProvider', 'fal', base)).toBe(false)
+    expect(settingMatchesDefault('videoProvider', 'opengen', base)).toBe(true)
     expect(settingMatchesDefault('signupBonusCredits', site.signupBonusCredits, base)).toBe(true)
     expect(settingMatchesDefault('signupBonusCredits', site.signupBonusCredits + 1, base)).toBe(false)
   })
@@ -198,11 +197,16 @@ describe('读取与每日上限（SQLite）', () => {
     expect(await generationsToday(db, now)).toBe(3)
   })
 
-  it('getSettings 返回合法渠道覆盖；production 里存的 mock 丢掉，解析回落到 env', async () => {
+  it('日常覆盖只留 opengen；旧的 yir 存值丢掉。production 里的 mock 也丢掉', async () => {
     store('videoProvider', JSON.stringify('yir'))
     const loaded = await getSettings({ ...env(), APP_ENV: 'development', VIDEO_PROVIDER: 'fal' })
-    expect(loaded.videoProvider).toBe('yir')
-    expect(resolveEffectiveVideoProvider({ APP_ENV: 'development', VIDEO_PROVIDER: 'fal' } as unknown as Env, loaded)).toBe('yir')
+    expect(loaded.videoProvider).toBeNull()
+    expect(storedVideoProvider({ videoProvider: 'yir' }, { APP_ENV: 'development' })).toBeNull()
+
+    sqlite.prepare(`UPDATE settings SET value = ? WHERE key = 'videoProvider'`).run(JSON.stringify('opengen'))
+    kv.store.clear()
+    const opengen = await getSettings({ ...env(), APP_ENV: 'development', VIDEO_PROVIDER: 'mock' })
+    expect(opengen.videoProvider).toBe('opengen')
 
     sqlite.prepare(`UPDATE settings SET value = ? WHERE key = 'videoProvider'`).run(JSON.stringify('mock'))
     kv.store.clear()

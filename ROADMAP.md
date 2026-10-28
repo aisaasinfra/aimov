@@ -201,9 +201,18 @@
   - 媒体：NanoAPI 下载素材用浏览器 UA，读视频要 Range。不支持 Range 或不带扩展名的视频地址都以 `internal_error` 失败，并全额退款。
   - 未在 aimov 验证：后台“测试连接”按钮、付费出片。
 
+**#37 生成履约链路（站点侧）**（2026-10-28）
+
+- 全站 `fulfillmentMode`。日常 `auto` 只走 OpenGen。不能自动的组件在扣费前拒绝。
+- D1 保存 `component_id` / `component_version`。冻结期只有一图加源视频可自动。jobs 正文不带组件 id。
+- 提交前不可达：同一 `generation_id` 改人工。结果不明则冻结在 OpenGen。任务 id 写下后不再改人工。Webhook 只触发轮询。
+- 人工单通知 `ADMIN_EMAILS`。Sheet 去重，且不是领取锁。没有写死 SLA 分钟数。
+- `EMERGENCY_VIDEO_PROVIDER` 默认关，和 OpenGen 同时配置则失败关闭。配置检查能区分未配置、不可达和不健康。不把隧道、本机或 stub 写成④就绪。
+- 未做：OpenGen 内多上游串行、组件包发布、④现场切换证据、全量组件目录、Sheet 列重设计、SLA 分钟数。功能05 的生产收口和功能07 的④就绪都还没有验收证据。
+
 **#36 生成履行开关**（2026-10-27）
 
-- 后台 `fulfillmentMode`：`manual` | `auto`。数据库没存时默认 `manual`。可选 `fulfillmentModeByTemplate`（模板 id → manual/auto）。收款（Waffo / PayPal.cn）不动。
+- 后台 `fulfillmentMode`：`manual` | `auto`。数据库没存时默认 `manual`。当天曾有可选 `fulfillmentModeByTemplate`。2026-10-28 起按模板覆盖已取消，见 #37。收款（Waffo / PayPal.cn）不动。
 - `manual`：扣积分，`generations.provider=manual`、`status=queued`，不 `enqueueJob`、不调厂商。Google Sheet 是人工镜像（服务账号 JWT + Sheets API v4）。写失败保留 D1 行，`provider_meta.sheetError`，后台可重试。邮件只通知已进入队列。
 - 后台可对人工单粘贴成品 https 地址（`storeOutputFromUrl` 进 R2）或用现有 `failGeneration` 退积分。定时维护和积压告警跳过 `manual`，避免 45 分钟被当成厂商超时退款。
 - 本地 e2e 在 global setup 里把履行拨到 `auto`，否则 mock 队列不会跑。单测覆盖模式解析、manual 不入队、auto 仍入队、Sheet 客户端（假 fetch）。

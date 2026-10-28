@@ -15,6 +15,7 @@ const LOCAL_DEV_VARS = {
   SITE_URL: 'http://localhost:3000',
   PAYMENT_PROVIDER: 'mock',
   VIDEO_PROVIDER: 'mock',
+  EMERGENCY_VIDEO_PROVIDER: '',
   MODERATION_PROVIDER: 'mock',
   // 支付商一律打 test 环境：.dev.vars 放的是 test 凭据，sandbox e2e 也只能用测试卡，不能对着正式环境下单
   WAFFO_ENVIRONMENT: 'test',

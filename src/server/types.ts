@@ -94,6 +94,8 @@ export interface GenerationRow {
   attempts: number
   refunded: number
   provider_cost_cents: number | null
+  component_id: string | null
+  component_version: number | null
   created_at: string
   started_at: string | null
   completed_at: string | null

@@ -78,6 +78,7 @@ export function runDoctor(
     vars,
     // 没核对或查不到 secret 时先当作都已配置，下面单独报告
     secrets: secretNames ? Object.fromEntries(secretNames.map((name) => [name, true])) : new Proxy({}, { get: () => true }),
+    secretsAssumed: !secretNames,
     bindings: configBindings(config),
     packageIds,
     planIds,

@@ -57,6 +57,142 @@ export function openGenUrl(baseUrl: string, path: string) {
   return url.toString()
 }
 
+export type OpenGenDeploymentClass = 'local' | 'tunnel' | 'public' | 'invalid'
+
+// 本机和隧道可以联调。健康检查通过也不等于生产就绪，调用方不要写成④。
+export function openGenDeploymentClass(baseUrl: string): OpenGenDeploymentClass {
+  let url: URL
+  try {
+    url = new URL(baseUrl)
+  } catch {
+    return 'invalid'
+  }
+  const host = url.hostname.toLowerCase()
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost') || host.endsWith('.local')) return 'local'
+  if (/trycloudflare\.com|ngrok|loca\.lt|localhost\.run|localtunnel/i.test(host)) return 'tunnel'
+  return 'public'
+}
+
+export interface OpenGenJobFields {
+  generationId: string
+  durationSeconds: number
+  imageUrl: string
+  sourceVideoUrl: string
+  webhookUrl: string
+}
+
+// 冻结的 jobs 正文。没有 component_id、capability、play、site_id。网关不保存组件 id，不能假装它校验过。
+export function openGenJobBody(input: OpenGenJobFields): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    generation_id: input.generationId,
+    duration_seconds: input.durationSeconds,
+    image_url: input.imageUrl,
+    source_video_url: input.sourceVideoUrl,
+  }
+  if (input.webhookUrl.startsWith('https://')) body.webhook_url = input.webhookUrl
+  return body
+}
+
+const REJECTED_BEFORE_STORE = new Set(['vendor_not_configured', 'vendor_kind_unsupported', 'vendor_request_invalid'])
+
+export type OpenGenSubmitObservation =
+  | { kind: 'accepted'; requestId: string; reused: boolean; meta: Record<string, unknown> }
+  | { kind: 'rejected_before_store'; code: string; message: string }
+  | { kind: 'unhealthy'; code: string; message: string }
+  | { kind: 'not_configured'; message: string }
+  | { kind: 'unknown'; code: string; message: string; retryable: true }
+  | { kind: 'failed'; code: string; message: string; retryable: boolean }
+
+export type OpenGenLookup =
+  | { kind: 'found'; taskId: string }
+  | { kind: 'absent' }
+  | { kind: 'unclear'; message: string }
+  | { kind: 'not_configured'; message: string }
+
+export type OpenGenReachability = 'reachable' | 'unreachable' | 'unhealthy' | 'not_configured' | 'stub'
+
+export async function observeOpenGenSubmit(env: Env, input: VideoSubmitInput): Promise<OpenGenSubmitObservation> {
+  if (openGenStubEnabled(env)) {
+    const stub = stubSubmit(input)
+    return { kind: 'accepted', requestId: stub.requestId, reused: false, meta: stub.meta }
+  }
+  const config = describeOpenGenConfig(env)
+  if (config.mode !== 'ready') {
+    return { kind: 'not_configured', message: config.mode === 'missing' ? config.message : MISSING }
+  }
+  let response: Response
+  try {
+    response = await request(config, JOBS_PATH, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': input.generationId },
+      body: JSON.stringify(
+        openGenJobBody({
+          generationId: input.generationId,
+          durationSeconds: input.durationSeconds,
+          imageUrl: input.imageUrl,
+          sourceVideoUrl: input.sourceVideoUrl,
+          webhookUrl: input.webhookUrl,
+        }),
+      ),
+    })
+  } catch (error) {
+    if (error instanceof VideoProviderError) return { kind: 'unknown', code: error.code, message: error.message, retryable: true }
+    const reason = error instanceof Error ? error.message : 'network'
+    return { kind: 'unknown', code: 'opengen_unreachable', message: scrub(`OpenGen 不可达：${reason}`, config.apiKey), retryable: true }
+  }
+  const body = await readJob(response, config.apiKey)
+  if ((response.status === 200 || response.status === 201 || response.status === 409) && body?.id) {
+    return { kind: 'accepted', requestId: body.id, reused: response.status === 409, meta: { generationId: input.generationId, ...(response.status === 409 ? { reused: true } : {}) } }
+  }
+  const upstream = body?.error?.code?.trim() ?? ''
+  if (response.status === 503 && REJECTED_BEFORE_STORE.has(upstream)) {
+    const error = httpError('submit', response, body, config.apiKey)
+    return { kind: 'rejected_before_store', code: error.code, message: error.message }
+  }
+  if (response.status === 401 || response.status === 403) {
+    const error = httpError('submit', response, body, config.apiKey)
+    return { kind: 'unhealthy', code: error.code, message: 'OpenGen 已配置但不健康：鉴权失败' }
+  }
+  const error = httpError('submit', response, body, config.apiKey)
+  if (error.retryable) return { kind: 'unknown', code: error.code, message: error.message, retryable: true }
+  return { kind: 'failed', code: error.code, message: error.message, retryable: false }
+}
+
+// GET /v1/aimov/jobs/{generationId}。公网任务 id 等于 generation id。一次 404 不是「确认没有任务」。
+export async function lookupOpenGenJob(env: Env, generationId: string): Promise<OpenGenLookup> {
+  if (openGenStubEnabled(env)) return { kind: 'unclear', message: '联调 stub 不能确认远端没有任务' }
+  const config = describeOpenGenConfig(env)
+  if (config.mode !== 'ready') return { kind: 'not_configured', message: config.mode === 'missing' ? config.message : MISSING }
+  let response: Response
+  try {
+    response = await request(config, `${JOBS_PATH}/${encodeURIComponent(generationId)}`)
+  } catch (error) {
+    const message = error instanceof VideoProviderError ? error.message : scrub('OpenGen 不可达', config.apiKey)
+    return { kind: 'unclear', message }
+  }
+  if (response.status === 404) return { kind: 'absent' }
+  const body = await readJob(response, config.apiKey)
+  if (response.ok && body?.id) return { kind: 'found', taskId: body.id }
+  return { kind: 'unclear', message: scrub(`OpenGen 查询没有确认结果（HTTP ${response.status}）`, config.apiKey) }
+}
+
+// 提交前的健康检查。连不上才是 unreachable。5xx / 404 说明主机有响应，交给 POST。401 / 403 是不健康，不是未配置。
+export async function probeOpenGenReachability(env: Env, timeoutMs = 4000): Promise<OpenGenReachability> {
+  if (openGenStubEnabled(env)) return 'stub'
+  const config = describeOpenGenConfig(env)
+  if (config.mode !== 'ready') return 'not_configured'
+  try {
+    const response = await fetch(openGenUrl(config.baseUrl, OPENGEN_HEALTH_PATH), {
+      headers: { Authorization: `Bearer ${config.apiKey}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    if (response.status === 401 || response.status === 403) return 'unhealthy'
+    return 'reachable'
+  } catch {
+    return 'unreachable'
+  }
+}
+
 interface OpenGenJob {
   id?: string
   generation_id?: string
@@ -70,25 +206,10 @@ export function createOpenGenProvider(env: Env): VideoProvider {
   return {
     id: 'opengen',
     async submit(input) {
-      if (openGenStubEnabled(env)) return stubSubmit(input)
-      const config = requireReady(env)
-      const response = await request(config, JOBS_PATH, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': input.generationId },
-        body: JSON.stringify({
-          generation_id: input.generationId,
-          duration_seconds: input.durationSeconds,
-          image_url: input.imageUrl,
-          source_video_url: input.sourceVideoUrl,
-          // 非 https 回调（本地）不交给 OpenGen，改靠轮询
-          webhook_url: input.webhookUrl.startsWith('https://') ? input.webhookUrl : undefined,
-        }),
-      })
-      const body = await readJob(response, config.apiKey)
-      // 409 + id：同一 generation ID 已有任务，复用，不新建厂商任务
-      if (response.status === 409 && body?.id) return done(body.id, input.generationId, true)
-      if ((response.status === 200 || response.status === 201) && body?.id) return done(body.id, input.generationId, false)
-      throw httpError('submit', response, body, config.apiKey)
+      const observed = await observeOpenGenSubmit(env, input)
+      if (observed.kind === 'accepted') return { requestId: observed.requestId, meta: observed.meta }
+      if (observed.kind === 'not_configured') throw new VideoProviderError('provider_not_configured', observed.message, false)
+      throw new VideoProviderError(observed.code, observed.message, observed.kind === 'unknown' ? true : observed.kind === 'failed' ? observed.retryable : false)
     },
 
     async status(requestId, meta): Promise<VideoStatus> {
@@ -104,10 +225,6 @@ export function createOpenGenProvider(env: Env): VideoProvider {
       return Math.round(durationSeconds * site.video.opengen.costCentsPerSecond)
     },
   }
-}
-
-function done(requestId: string, generationId: string, reused: boolean): VideoSubmitResult {
-  return { requestId, meta: { generationId, ...(reused ? { reused: true } : {}) } }
 }
 
 function requireReady(env: Env) {

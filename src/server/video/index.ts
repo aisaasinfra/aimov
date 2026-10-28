@@ -27,13 +27,9 @@ function createMockProvider(): VideoProvider {
 
 const REAL_VIDEO_PROVIDERS = ['fal', 'yir', 'nanoapi', 'opengen'] as const
 
+// 后台日常选项。fal / yir / nanoapi 仍可由 getVideoProvider 执行飞行中的工单，或由应急开关显式打开，但不出现在日常下拉里。
 export function videoProviderOptions(env: { APP_ENV?: string }): { value: ExecutableVideoProviderId; label: string }[] {
-  const options: { value: ExecutableVideoProviderId; label: string }[] = [
-    { value: 'fal', label: 'fal' },
-    { value: 'yir', label: 'yir' },
-    { value: 'nanoapi', label: 'nanoapi' },
-    { value: 'opengen', label: 'OpenGen' },
-  ]
+  const options: { value: ExecutableVideoProviderId; label: string }[] = [{ value: 'opengen', label: 'OpenGen' }]
   if (!isProduction(env)) options.push({ value: 'mock', label: 'mock（仅开发 / preview）' })
   return options
 }
@@ -47,7 +43,7 @@ export function parseVideoProviderId(value: string, env: { APP_ENV?: string }): 
   throw new ApiError(503, 'video_not_configured', `Unsupported VIDEO_PROVIDER: ${value || '(空)'}`)
 }
 
-// 创建工单和视频探测共用：运行时覆盖优先，否则该请求的 env.VIDEO_PROVIDER。
+// 不是日常 auto 的选路。日常 auto 用 describeAutoRoute。这里保留给飞行中的工单、显式探测，以及仍按 env / 覆盖读渠道的调用方。
 // settings.videoProvider 为 null / 空表示没有合法覆盖。mock 在 isProduction 时不是合法覆盖，调用方应先丢掉。
 export function resolveEffectiveVideoProvider(env: Env, settings?: { videoProvider?: string | null } | null): ExecutableVideoProviderId {
   const override = settings?.videoProvider
