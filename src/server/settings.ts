@@ -2,10 +2,10 @@ import type { Hono } from 'hono'
 import { LOCALES, LOCALE_META, site, type Locale } from '#/config/site'
 import { audit, readJson, requireAdmin } from './http'
 import type { AppContext, UserRow } from './types'
-import { ApiError, isProduction, nowIso } from './util'
+import { ApiError, nowIso } from './util'
 import { dualCheckoutConfigured } from './payments'
 import { type FulfillmentMode } from './fulfillment-mode'
-import { parseVideoProviderId, videoProviderOptions } from './video'
+import { isDailyVideoProvider, parseVideoProviderId, videoProviderOptions } from './video'
 import type { VideoProviderId } from './video/types'
 
 // 后台运营参数：只放非敏感、不改代码就要能调的参数；密钥仍放 wrangler secrets，不进数据库。
@@ -22,7 +22,7 @@ export type RuntimeSettings = {
   signupBonusValidDays: number
   referralRewardCredits: number
   generationDailyCap: number
-  // 未写入数据库时是 manual。auto 只走 OpenGen（或开发 mock / 默认关闭的应急开关）。全站一个值，没有按模板分轨。
+  // 未写入数据库时是 manual。auto 在 Yir / FAL / OpenGen 中三选一（选哪个走哪个）。全站一个值，没有按模板分轨。
   fulfillmentMode: FulfillmentMode
 } & Record<`announcement.${Locale}`, string>
 
@@ -41,7 +41,7 @@ export type SettingField =
 const referralOn = site.referralRewardCredits > 0
 
 const VIDEO_PROVIDER_HELP =
-  '日常自动生成只走 OpenGen。这里可选 OpenGen，development / preview 还可以选 mock。fal / yir / nanoapi 不是日常渠道，保存它们会被拒绝。新工单锁定渠道，约 60 秒后只影响新任务。已在处理的工单继续用创建时写入的 provider。应急开关是环境变量 EMERGENCY_VIDEO_PROVIDER，默认关闭，不能和 OpenGen 同时打开。OpenGen 只配 OPENGEN_BASE_URL 和 OPENGEN_API_KEY，厂商 Key 留在 OpenGen 主机。'
+  'fulfillmentMode=auto 时，新工单在 Yir、FAL、OpenGen 中同级可选、三选一（选哪个走哪个）。development / preview 还可以选 mock。nanoapi 适配器仍在，但不在这个日常下拉里（是否并入待确认）。保存后约 60 秒只影响新工单；在途工单继续用创建时写入的 generations.provider，不改道、不二次扣积分。选 Yir 需要 YIR_API_KEY，选 FAL 需要 FAL_KEY，选 OpenGen 只需要 OPENGEN_BASE_URL 和本站 OPENGEN_API_KEY（ogsk_），不要求站上同时有另外两家的密钥。缺所选渠道时，新单在扣积分前拒绝，文案含「未配置」。EMERGENCY_VIDEO_PROVIDER 不再参与选路。'
 
 export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
   const fields: SettingField[] = [
@@ -62,7 +62,7 @@ export function settingFields(env: { APP_ENV?: string } = {}): SettingField[] {
 
 const FULFILLMENT_MODE_OPTIONS = [
   { value: 'manual', label: '人工队列（Google Sheet）' },
-  { value: 'auto', label: '自动生成（OpenGen）' },
+  { value: 'auto', label: '自动生成（Yir / FAL / OpenGen 三选一）' },
 ] as const
 
 export const SETTING_FIELDS: readonly SettingField[] = [
@@ -70,7 +70,7 @@ export const SETTING_FIELDS: readonly SettingField[] = [
     key: 'fulfillmentMode',
     kind: 'enum',
     label: '生成履行方式',
-    help: '全站一个开关，只影响新任务。manual：扣积分后进入人工队列，不调用视频服务商、不进 VIDEO_QUEUE。auto：只走 OpenGen。不能自动的组件会在扣积分前拒绝，不会改成人工。没存过时默认 manual。不改变收款。',
+    help: '全站一个开关，只影响新任务。manual：扣积分后进入人工队列，写 Google 表格镜像，不调用 Yir / FAL / OpenGen，不进 VIDEO_QUEUE。auto：在当前视频生成渠道里三选一，选哪个走哪个。不能自动的组件会在扣积分前拒绝，不会改成人工。没存过时默认 manual。不改变收款。',
     options: FULFILLMENT_MODE_OPTIONS,
   },
   {
@@ -157,26 +157,30 @@ function isValid(field: SettingField, value: unknown) {
 }
 
 // 存值等于这条渠道的环境变量默认时删覆盖行。其它字段仍对照静态 DEFAULT_SETTINGS。
-// 后台显示的日常渠道。库存的 fal / yir / nanoapi 和环境变量里的同名值都不是日常默认。
+// 后台显示的日常渠道。已保存的 yir / fal / opengen（非生产还有 mock）优先；否则用环境变量里的同名日常值。
+// 环境变量不是日常渠道时，下拉先显示 OpenGen，但那不是已保存的覆盖，新单仍按 describeAutoRoute 拒绝，直到运营者保存一项。
 export function displayedVideoProvider(env: { APP_ENV?: string; VIDEO_PROVIDER?: string }, stored: string | null): string {
-  if (stored === 'opengen' || (stored === 'mock' && !isProduction(env))) return stored
-  if (!isProduction(env) && (env.VIDEO_PROVIDER ?? '') === 'mock') return 'mock'
+  if (stored && isDailyVideoProvider(stored, env)) return stored
+  const fromEnv = env.VIDEO_PROVIDER ?? ''
+  if (isDailyVideoProvider(fromEnv, env)) return fromEnv
   return 'opengen'
 }
 
 export function settingMatchesDefault(key: string, value: unknown, env: Env) {
-  if (key === 'videoProvider') return value === displayedVideoProvider(env, null)
+  if (key === 'videoProvider') {
+    const fromEnv = env.VIDEO_PROVIDER ?? ''
+    return isDailyVideoProvider(fromEnv, env) && value === fromEnv
+  }
   return key in DEFAULT_SETTINGS && value === DEFAULT_SETTINGS[key as keyof RuntimeSettings]
 }
 
-const LEGACY_DAILY_PROVIDERS = new Set(['fal', 'yir', 'nanoapi'])
-
-// 合法的日常覆盖只有 opengen，以及非 production 的 mock。fal / yir / nanoapi 的旧存值丢掉。
+// 合法的日常覆盖是 yir / fal / opengen，以及非 production 的 mock。nanoapi 不作为日常覆盖（适配器仍留给在途工单）。
 export function storedVideoProvider(stored: Record<string, unknown>, env: { APP_ENV?: string }): VideoProviderId | null {
   const value = stored.videoProvider
-  if (typeof value !== 'string' || !value || LEGACY_DAILY_PROVIDERS.has(value)) return null
+  if (typeof value !== 'string' || !value || value === 'nanoapi') return null
   try {
-    return parseVideoProviderId(value, env)
+    const parsed = parseVideoProviderId(value, env)
+    return isDailyVideoProvider(parsed, env) ? parsed : null
   } catch {
     return null
   }
@@ -292,7 +296,7 @@ async function adminView(db: D1Database, env: Env) {
   return {
     fields: settingFields(env),
     values: { ...mergeSettings(stored), videoProvider: displayedVideoProvider(env, override) },
-    // 日常默认是 OpenGen；development / preview 且 VIDEO_PROVIDER=mock 时显示 mock。不把 fal / yir / nanoapi 当成日常默认。
+    // 没存覆盖时，默认显示环境变量里的 yir / fal / opengen（非生产还有 mock）。
     defaults: { ...DEFAULT_SETTINGS, videoProvider: displayedVideoProvider(env, null) },
     overrides: meta.results,
   }

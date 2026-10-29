@@ -8,20 +8,35 @@ The in-app page is `/changelog` (six public locales: en, de, es, fr, pt-BR, zh-T
 
 站内页面是 `/changelog`（六种公开语言：en、de、es、fr、pt-BR、zh-TW）。本文件仍是仓库日志。
 
+## 2026-10-29
+
+### Changed: peer video channels (Yir / FAL / OpenGen)
+
+- When `fulfillmentMode=auto`, the admin channel list is Yir, FAL, and OpenGen (plus `mock` in development / preview). The saved choice is the only auto provider for new orders. One order does not call two auto providers.
+- `manual` is unchanged: debit, Google Sheet mirror, human result. It does not call Yir, FAL, or OpenGen.
+- `EMERGENCY_VIDEO_PROVIDER` no longer selects a channel and no longer conflicts with OpenGen. Set `videoProvider` or `VIDEO_PROVIDER` to `yir`, `fal`, or `opengen` directly.
+- A missing key for the selected channel rejects the order before credits are debited. The message says 未配置. OpenGen needs `OPENGEN_BASE_URL` and `OPENGEN_API_KEY` only.
+- `nanoapi` stays as an adapter for in-flight jobs. It is not a daily choice (still to be confirmed) and it is not removed.
+- Connection probes report the selected channel as configured-success, configured-failure, or not configured, and do not return the full secret.
+
+Upgrading a site: merge. No migration. If a deploy still sets `EMERGENCY_VIDEO_PROVIDER`, leave it empty and pick the channel in admin settings. In-flight rows keep `generations.provider`.
+
+变更：自动渠道改为 Yir / FAL / OpenGen 三选一（选哪个走哪个）。人工轨保留。缺所选密钥时扣积分前拒绝。`EMERGENCY_VIDEO_PROVIDER` 不再参与选路。
+
 ## 2026-10-28
 
 ### Changed: whole-site generation chain
 
 - `fulfillmentMode` is whole-site. `fulfillmentModeByTemplate` is ignored and removed from the admin form. A stored row is deleted the next time an admin opens settings.
-- Everyday `auto` submits and polls OpenGen only. `VIDEO_PROVIDER=fal|yir|nanoapi` is not target-state auto. `EMERGENCY_VIDEO_PROVIDER` defaults to empty and fails closed when OpenGen is also configured.
+- This release sent everyday auto through OpenGen. The 2026-10-29 entry replaces that daily lock with a three-way choice: Yir, FAL, or OpenGen.
 - New generations store `component_id` and `component_version` (`migrations/0017_generation_component.sql`). Only `image-source-video` v1 is auto-eligible. Other shapes are rejected before debit while the site is `auto`. The OpenGen jobs body is unchanged and does not include `component_id`.
-- OpenGen webhooks only enqueue a poll. The body is discarded. A task id on the row never moves that row to manual. Unreachable-before-submit uses the same `generation_id` on the manual queue, one debit.
+- OpenGen webhooks only enqueue a poll. The body is discarded. A task id on the row never moves that row to manual. When the selected channel is OpenGen, unreachable-before-submit uses the same `generation_id` on the manual queue, one debit.
 - Manual orders email `ADMIN_EMAILS`. The user queue email is separate. Sheet rows stay a mirror: duplicates of the same `generation_id` are deleted, and Sheet edits do not change D1 ownership.
-- Config checks warn when vendor secrets sit on the Worker while the emergency switch is off, and they do not treat a clean OpenGen check, a tunnel, localhost, or the stub as production cutover.
+- Config checks do not treat a clean OpenGen check, a tunnel, localhost, or the stub as production cutover.
 
-Upgrading a site: merge, then apply migration `0017`. Add `EMERGENCY_VIDEO_PROVIDER` (empty) next to the other vars. Point everyday auto at OpenGen and remove fal / yir / nanoapi secrets from the production Worker when you are ready; this release does not record that cutover as done.
+Upgrading a site: merge, then apply migration `0017`. Channel selection after 2026-10-29 is the admin provider or `VIDEO_PROVIDER`, not an emergency var.
 
-变更：履行方式改为全站一个开关。日常 auto 只走 OpenGen。生成单记下组件 id 和版本。人工单会通知履约负责人。应急开关默认关闭。这次不宣称生产收口或④已经切换。
+变更：履行方式改为全站一个开关。生成单记下组件 id 和版本。人工单会通知履约负责人。站侧渠道的日常锁见 2026-10-29。这次不宣称生产收口或④已经切换。
 
 ## 2026-10-27
 

@@ -164,19 +164,19 @@ describe('冻结的 jobs 正文和部署分类', () => {
 })
 
 describe('新工单选路', () => {
-  it('日常 auto 忽略 fal；应急开关和 OpenGen 同时存在则失败关闭', () => {
+  it('三选一：选哪个走哪个；应急变量不改变结果', () => {
     expect(
-      describeAutoRoute({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', EMERGENCY_VIDEO_PROVIDER: '' } as Env).ok,
-    ).toBe(false)
-    expect(
-      describeAutoRoute({
-        APP_ENV: 'production',
-        VIDEO_PROVIDER: 'fal',
-        EMERGENCY_VIDEO_PROVIDER: '',
-        OPENGEN_BASE_URL: 'https://og.example',
-        OPENGEN_API_KEY: 'ogsk_site',
-      } as Env),
-    ).toMatchObject({ ok: true, provider: 'opengen', fulfillment: 'opengen' })
+      describeAutoRoute({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key', EMERGENCY_VIDEO_PROVIDER: '' } as Env),
+    ).toMatchObject({ ok: true, provider: 'fal', fulfillment: 'fal' })
+    const falMissing = describeAutoRoute({
+      APP_ENV: 'production',
+      VIDEO_PROVIDER: 'fal',
+      EMERGENCY_VIDEO_PROVIDER: '',
+      OPENGEN_BASE_URL: 'https://og.example',
+      OPENGEN_API_KEY: 'ogsk_site',
+    } as Env)
+    expect(falMissing).toMatchObject({ ok: false, code: 'provider_not_configured', provider: 'fal' })
+    if (!falMissing.ok) expect(falMissing.message).toContain('未配置')
     expect(
       describeAutoRoute({
         APP_ENV: 'development',
@@ -184,25 +184,37 @@ describe('新工单选路', () => {
         EMERGENCY_VIDEO_PROVIDER: 'fal',
         OPENGEN_API_KEY: 'ogsk_site',
       } as Env),
-    ).toMatchObject({ ok: false, code: 'emergency_switch_conflict' })
+    ).toMatchObject({ ok: true, provider: 'mock', fulfillment: 'mock' })
     expect(
       describeAutoRoute({
         APP_ENV: 'production',
         VIDEO_PROVIDER: 'opengen',
         EMERGENCY_VIDEO_PROVIDER: 'fal',
-        OPENGEN_BASE_URL: '',
-        OPENGEN_API_KEY: '',
+        OPENGEN_BASE_URL: 'https://og.example',
+        OPENGEN_API_KEY: 'ogsk_site',
         OPENGEN_STUB: '0',
+        FAL_KEY: 'fal_key',
       } as Env),
-    ).toMatchObject({ ok: true, provider: 'fal', fulfillment: 'emergency' })
+    ).toMatchObject({ ok: true, provider: 'opengen', fulfillment: 'opengen' })
+    expect(
+      describeAutoRoute({
+        APP_ENV: 'production',
+        VIDEO_PROVIDER: 'yir',
+        YIR_API_KEY: 'yir_key',
+        EMERGENCY_VIDEO_PROVIDER: 'fal',
+        OPENGEN_BASE_URL: 'https://og.example',
+        OPENGEN_API_KEY: 'ogsk_site',
+      } as Env),
+    ).toMatchObject({ ok: true, provider: 'yir', fulfillment: 'yir' })
     expect(describeAutoRoute({ APP_ENV: 'development', VIDEO_PROVIDER: 'mock', EMERGENCY_VIDEO_PROVIDER: '' } as Env)).toMatchObject({
       ok: true,
       provider: 'mock',
     })
-    expect(describeAutoRoute({ APP_ENV: 'production', VIDEO_PROVIDER: 'mock', EMERGENCY_VIDEO_PROVIDER: 'nope' } as Env)).toMatchObject({
-      ok: false,
-      code: 'emergency_switch_invalid',
-    })
+    const productionMock = describeAutoRoute({ APP_ENV: 'production', VIDEO_PROVIDER: 'mock', EMERGENCY_VIDEO_PROVIDER: 'nope' } as Env)
+    expect(productionMock).toMatchObject({ ok: false, code: 'provider_not_configured', provider: 'mock' })
+    if (!productionMock.ok) expect(productionMock.message).toContain('未配置')
+    const nano = describeAutoRoute({ APP_ENV: 'production', VIDEO_PROVIDER: 'nanoapi', NANOAPI_API_KEY: 'nano_key' } as Env)
+    expect(nano).toMatchObject({ ok: false, code: 'provider_not_configured', provider: 'nanoapi' })
   })
 
   it('组件检查先拒绝禁止字段和不兼容版本；auto 下不能自动的组件在形状错误之前拒绝', () => {
@@ -337,7 +349,7 @@ describe('创建生成：扣费前拒绝，不可达才落同一行人工', () =
     expect(credits()).toBe(28)
   })
 
-  it('OpenGen 未配置、不健康、或与应急开关冲突时不扣积分', async () => {
+  it('OpenGen 未配置或不健康时不扣积分；应急变量不再改道', async () => {
     storeSetting('fulfillmentMode', 'auto')
     env.OPENGEN_BASE_URL = ''
     env.OPENGEN_API_KEY = ''
@@ -353,17 +365,19 @@ describe('创建生成：扣费前拒绝，不可达才落同一行人工', () =
     expect(await unhealthy.json()).toEqual({ error: 'opengen_unhealthy' })
 
     env.EMERGENCY_VIDEO_PROVIDER = 'fal'
-    const conflict = await create()
-    expect(conflict.status).toBe(503)
-    expect(await conflict.json()).toEqual({ error: 'emergency_switch_conflict' })
+    env.FAL_KEY = 'fal_should_not_be_used'
+    const stillOpenGen = await create()
+    expect(stillOpenGen.status).toBe(503)
+    expect(await stillOpenGen.json()).toEqual({ error: 'opengen_unhealthy' })
     expect(credits()).toBe(40)
     expect(rows()).toEqual([])
     expect(sent).toEqual([])
   })
 
-  it('提交前连不上：同一 generation 改人工，只扣一次，不入队，不改走 fal', async () => {
+  it('所选是 OpenGen 且提交前连不上：同一 generation 改人工，只扣一次，不入队，不改走 fal', async () => {
     storeSetting('fulfillmentMode', 'auto')
-    env.VIDEO_PROVIDER = 'fal'
+    env.FAL_KEY = 'fal_should_not_be_used'
+    env.YIR_API_KEY = 'yir_should_not_be_used'
     vi.stubGlobal('fetch', async (url: string) => {
       fetched.push(String(url))
       throw new Error('connect refused')
@@ -380,16 +394,17 @@ describe('创建生成：扣费前拒绝，不可达才落同一行人工', () =
     expect(sqlite.prepare(`SELECT COUNT(*) AS n FROM credit_ledger WHERE reason = 'generation'`).get()).toEqual({ n: 1 })
   })
 
-  it('日常 fal 环境在 OpenGen 健康时仍入 OpenGen 队列', async () => {
+  it('选 fal 就入 fal 队列，创建时不打 OpenGen', async () => {
     storeSetting('fulfillmentMode', 'auto')
     env.VIDEO_PROVIDER = 'fal'
     env.FAL_KEY = 'fal_should_not_be_used'
     const res = await create()
     expect(res.status).toBe(201)
-    expect(rows()[0]).toMatchObject({ provider: 'opengen' })
+    expect(rows()[0]).toMatchObject({ provider: 'fal' })
     expect(sent).toEqual([{ kind: 'submit', generationId: rows()[0]!.id }])
-    expect(fetched.every((url) => url.includes('og.example'))).toBe(true)
-    expect(JSON.stringify(fetched)).not.toContain('fal.ai')
+    expect(fetched.some((url) => url.includes('og.example'))).toBe(false)
+    expect(fetched.some((url) => url.includes('fal.ai'))).toBe(false)
+    expect(JSON.stringify(await res.clone().json())).not.toContain('fal_should_not_be_used')
   })
 
   it('新的人工单通知履约负责人，用户的排队邮件另算', async () => {
@@ -679,13 +694,14 @@ describe('Sheet 不是领取锁', () => {
 })
 
 describe('配置检查能区分未配置、不健康和未收口', () => {
-  it('应急开关冲突是错误；厂商密钥在开关关闭时只提醒；隧道不是④', () => {
-    const conflict = checkConfig(ready({ vars: { EMERGENCY_VIDEO_PROVIDER: 'fal' } }))
-    expect(conflict.map((issue) => `${issue.level}:${issue.key}`)).toContain('error:EMERGENCY_VIDEO_PROVIDER')
-    expect(conflict.find((issue) => issue.key === 'EMERGENCY_VIDEO_PROVIDER')?.message).toContain('不是未配置')
+  it('应急变量只提醒；所选 OpenGen 不因多出来的厂商密钥告警；隧道不是④', () => {
+    const leftover = checkConfig(ready({ vars: { EMERGENCY_VIDEO_PROVIDER: 'fal' } }))
+    expect(leftover.map((issue) => `${issue.level}:${issue.key}`)).toContain('warn:EMERGENCY_VIDEO_PROVIDER')
+    expect(leftover.map((issue) => `${issue.level}:${issue.key}`)).not.toContain('error:EMERGENCY_VIDEO_PROVIDER')
+    expect(leftover.find((issue) => issue.key === 'EMERGENCY_VIDEO_PROVIDER')?.message).not.toContain('失败关闭')
 
     const vendor = checkConfig(ready({ secrets: { FAL_KEY: 'fal_secret_value' } }))
-    expect(vendor).toEqual([expect.objectContaining({ level: 'warn', key: 'FAL_KEY' })])
+    expect(vendor).toEqual([])
     expect(JSON.stringify(vendor)).not.toContain('fal_secret_value')
 
     const tunnel = checkConfig(ready({ vars: { OPENGEN_BASE_URL: 'https://demo.trycloudflare.com' } }))
@@ -701,7 +717,7 @@ describe('配置检查能区分未配置、不健康和未收口', () => {
 
     vi.stubGlobal('fetch', async () => new Response('no', { status: 401 }))
     const denied = await runProbe(
-      { APP_ENV: 'production', VIDEO_PROVIDER: 'fal', OPENGEN_BASE_URL: 'https://og.example', OPENGEN_API_KEY: 'ogsk_site_key', OPENGEN_STUB: '0' } as Env,
+      { APP_ENV: 'production', VIDEO_PROVIDER: 'opengen', OPENGEN_BASE_URL: 'https://og.example', OPENGEN_API_KEY: 'ogsk_site_key', OPENGEN_STUB: '0' } as Env,
       'video',
       admin,
     )

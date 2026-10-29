@@ -1,4 +1,4 @@
-// yir.ai 网关（可选的第二个视频服务商，VIDEO_PROVIDER=yir）：https://yir.ai/docs
+// yir.ai 网关（日常三选一里的 Yir，VIDEO_PROVIDER=yir 或后台选 yir）：https://yir.ai/docs
 // 照片 + 模板源视频按 reference 模式提交（Kling Motion Control），两者都给公开 HTTPS 地址，yir 提交时各下载一次。
 // 配了 site.video.yir.scene 时分两步：先用图片模型把照片里的人合成进源视频首帧，再拿合成图做动作参考，成片保留源视频的场景。
 // Idempotency-Key 从生成任务 id 推出：队列重投或 Worker 中断后重新提交会拿回同一个 Job，不会重复计费。
