@@ -37,7 +37,7 @@ async function providerForBalance(env: Env): Promise<VideoProviderId> {
   } catch (error) {
     console.error('[alert] video provider resolve failed', error instanceof Error ? error.message : String(error))
   }
-  // 日常 auto 解析失败时不要去查 fal / yir / nanoapi 余额。
+  // 选路失败时不要改去查另一家。调用方把 OpenGen 当成没有余额接口。
   return 'opengen'
 }
 

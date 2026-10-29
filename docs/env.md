@@ -29,8 +29,8 @@
 | `PAYPAL_MODE` | `sandbox`、`live`；留空按 `sandbox` | 用 PayPal 时 | PayPal.cn 与全球站共用 Orders v2，没有单独的中国 API。`live` 才打 `https://api-m.paypal.com`，否则用 `https://api-m.sandbox.paypal.com`。webhook 证书主机必须和模式一致 |
 | `PAYPAL_API_BASE` | 留空，或与当前模式的官方主机完全一致 | 否 | 填了别的主机时通道关闭，上线检查报错。不要拿它改到非官方地址 |
 | `PAYPAL_PRODUCTS` | JSON，可留 `{}` | 否 | PayPal 按订单金额收积分包，不要求每个套餐都有商品 id。订阅不走 PayPal |
-| `VIDEO_PROVIDER` | `opengen`、`mock`；库存脚本里也可能仍是 `fal` / `yir` / `nanoapi` | 是 | 日常 `auto` 不靠这个值去选 fal / yir / nanoapi。那些取值不是目标态 auto，上线检查只警告，不因此要求厂商密钥。`mock` 只允许 development / preview。OpenGen 见 [opengen.md](opengen.md) |
-| `EMERGENCY_VIDEO_PROVIDER` | 空，或 `fal` / `yir` / `nanoapi` | 否 | 默认空（关闭）。与 OpenGen（base URL、key 或 stub）同时配置时失败关闭。只作用于新工单。收口后删掉，并清掉生产 Worker 上的厂商密钥。空着不表示收口已经完成 |
+| `VIDEO_PROVIDER` | `yir`、`fal`、`opengen`、`mock` | 是 | 没在后台保存覆盖时，`auto` 的新单走这个值。`yir` / `fal` / `opengen` 三选一，选哪个走哪个。`mock` 只允许 development / preview。`nanoapi` 不是日常选项（待确认）。OpenGen 见 [opengen.md](opengen.md) |
+| `EMERGENCY_VIDEO_PROVIDER` | 留空 | 否 | 已不再参与日常选路，也不会和 OpenGen 互斥。升级时改为直接选渠道。留着空值不影响新单。不要靠它同时打两家 |
 | `OPENGEN_BASE_URL` | 公网 `https://…` 或隧道；可空 | 用 OpenGen 时 | Worker 必须能访问该地址。不要在 URL 里放账号或查询串。development / preview 也接受 `http://`。这是连接地址，不是厂商 Key。本地 `wrangler dev` 可以用 `.dev.vars` 覆盖；不要放进 `.dev.vars.production`（它是 var，`sync-secrets` 会拒绝） |
 | `OPENGEN_STUB` | `0`、`1` | 否 | `1` 且非 production 时走进程内联调 stub，不访问网络。测试和文档把它标成「联调」，不是真实厂商验收。staging / production 拒绝 `1`。默认 `0` |
 | `MODERATION_PROVIDER` | `openai`、`none`、`mock` | 是 | 上传图片的审核方式。`none` 不审核，检查时给出警告 |
@@ -49,10 +49,10 @@
 | `DODO_API_KEY`、`DODO_WEBHOOK_SECRET` | `PAYMENT_PROVIDER=dodo` | API 密钥需要的权限见 README 的“第三方回调地址”；卖订阅还要 Subscriptions 读写和 Customers 写入，见 [subscriptions.md](subscriptions.md) |
 | `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET` | `PAYMENT_PROVIDER=stripe` | secret key（`sk_`）或受限 Key（`rk_`，权限见 [payments.md](payments.md) 的“Stripe”）；webhook 密钥是端点的 `whsec_...`。可选 secret，类型声明在 `src/env.d.ts` |
 | `PAYPAL_CLIENT_ID`、`PAYPAL_CLIENT_SECRET`、`PAYPAL_WEBHOOK_ID` | `PAYMENT_PROVIDER=paypal`，或要和 Waffo 一起出现在选择器里 | REST App 的 Client ID / Secret。`PAYPAL_WEBHOOK_ID` 是开发者后台该 webhook 的 ID，不能填字面量 `WEBHOOK_ID`。可选 secret，类型声明在 `src/env.d.ts` |
-| `FAL_KEY` | 仅应急开关 `EMERGENCY_VIDEO_PROVIDER=fal`，或执行创建时已经是 fal 的旧工单 | 日常 auto 不应在 Worker 上保留它。上线检查在开关关闭时只警告 |
-| `YIR_API_KEY` | 仅应急开关 `EMERGENCY_VIDEO_PROVIDER=yir`，或执行创建时已经是 yir 的旧工单 | 日常 auto 不应在 Worker 上保留它。上线检查在开关关闭时只警告。可选 secret，类型声明在 `src/env.d.ts`。建议在 yir Console 给这个 Key 设月度额度，见 README 的“视频服务商” |
-| `NANOAPI_API_KEY` | 仅应急开关 `EMERGENCY_VIDEO_PROVIDER=nanoapi`，或执行创建时已经是 nanoapi 的旧工单 | 日常 auto 不应在 Worker 上保留它。上线检查在开关关闭时只警告。可选 secret，类型声明在 `src/env.d.ts`。NanoAPI 没有月度额度，余额用完提交会返回 402，见 README 的“视频服务商” |
-| `OPENGEN_API_KEY` | 站点 `fulfillmentMode=auto` 的日常通道 | 可选 secret，类型声明在 `src/env.d.ts`。每个部署用自己的 `ogsk_`。Bearer 连接鉴权，不是 OpenGen 主机上的厂商 Key。请求不能带 `site_id` 或别人的 key。没配时探测文案含「未配置」，新单在扣积分前拒绝 |
+| `FAL_KEY` | 当前渠道是 `fal`（后台或 `VIDEO_PROVIDER`），或执行创建时已经是 fal 的在途工单 | 选 FAL 时缺了会在扣积分前拒绝，文案含「未配置」。选 Yir 或 OpenGen 时不要求它。可选 secret，类型声明在 `src/env.d.ts` |
+| `YIR_API_KEY` | 当前渠道是 `yir`，或执行创建时已经是 yir 的在途工单 | 选 Yir 时缺了会在扣积分前拒绝，文案含「未配置」。选 FAL 或 OpenGen 时不要求它。可选 secret，类型声明在 `src/env.d.ts`。建议在 yir Console 给这个 Key 设月度额度，见 README 的“视频服务商” |
+| `NANOAPI_API_KEY` | 执行创建时已经是 nanoapi 的在途工单 | nanoapi 不是日常三选一（待确认），适配器不删。新单不会因为这个密钥去走 nanoapi。可选 secret，类型声明在 `src/env.d.ts`。NanoAPI 没有月度额度，余额用完提交会返回 402，见 README 的“视频服务商” |
+| `OPENGEN_API_KEY` | 当前渠道是 `opengen` | 可选 secret，类型声明在 `src/env.d.ts`。每个部署用自己的 `ogsk_`。Bearer 连接鉴权，不是 OpenGen 主机上的厂商 Key。请求不能带 `site_id` 或别人的 key。没配时探测文案含「未配置」，新单在扣积分前拒绝。选 OpenGen 不要求同时有 `FAL_KEY` 或 `YIR_API_KEY` |
 | `OPENAI_API_KEY` | `MODERATION_PROVIDER=openai` | 可选 secret，类型声明在 `src/env.d.ts` |
 | `TURNSTILE_SECRET_KEY` | 配了 `TURNSTILE_SITE_KEY` | 同上 |
 | `PAYMENT_NOTIFY_WEBHOOK_URL` | 可选 | 每笔订单首次入账（含后台补单）时往聊天群发一条付款消息：金额、套餐、积分、来源和订单号。按域名识别：Telegram 填 `https://api.telegram.org/bot<token>/sendMessage?chat_id=<id>`；飞书 / Lark 填自定义机器人地址（不要开“签名校验”，可以用关键词“新付款”）；Discord 填频道 webhook；其他地址（如 Slack Incoming Webhook）发 `{"text": ...}`。发送失败只记日志，不影响入账。地址里带 token，所以放 secret。可选 secret，类型声明在 `src/env.d.ts` |

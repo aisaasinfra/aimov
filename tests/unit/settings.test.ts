@@ -52,9 +52,13 @@ describe('后台提交的运营参数', () => {
       throw new Error('expected invalid_setting')
     }
     expect(rejected('production')).toContain('opengen')
+    expect(rejected('production')).toContain('yir')
+    expect(rejected('production')).toContain('fal')
     expect(rejected('staging')).toContain('opengen')
     expect(rejected('production')).not.toContain('mock')
-    expect(rejected('production')).not.toContain('fal')
+    expect(parseSettingsPatch({ videoProvider: 'yir' }, { APP_ENV: 'production' })).toEqual({ videoProvider: 'yir' })
+    expect(parseSettingsPatch({ videoProvider: 'fal' }, { APP_ENV: 'production' })).toEqual({ videoProvider: 'fal' })
+    expect(invalid({ videoProvider: 'nanoapi' })).toContain('当前视频生成渠道')
     expect(invalid({ videoProvider: 'manual' })).toContain('当前视频生成渠道')
   })
 
@@ -129,10 +133,10 @@ describe('存值合并', () => {
     expect(mergeSettings({ videoProvider: 'opengen' })).not.toHaveProperty('videoProvider')
   })
 
-  it('日常渠道默认是 OpenGen，不是环境里的 fal；其它字段仍对照 site.ts', () => {
+  it('日常渠道默认跟随环境里的 fal；其它字段仍对照 site.ts', () => {
     const base = { VIDEO_PROVIDER: 'fal', APP_ENV: 'production' } as unknown as Env
-    expect(settingMatchesDefault('videoProvider', 'fal', base)).toBe(false)
-    expect(settingMatchesDefault('videoProvider', 'opengen', base)).toBe(true)
+    expect(settingMatchesDefault('videoProvider', 'fal', base)).toBe(true)
+    expect(settingMatchesDefault('videoProvider', 'opengen', base)).toBe(false)
     expect(settingMatchesDefault('signupBonusCredits', site.signupBonusCredits, base)).toBe(true)
     expect(settingMatchesDefault('signupBonusCredits', site.signupBonusCredits + 1, base)).toBe(false)
   })
@@ -197,11 +201,13 @@ describe('读取与每日上限（SQLite）', () => {
     expect(await generationsToday(db, now)).toBe(3)
   })
 
-  it('日常覆盖只留 opengen；旧的 yir 存值丢掉。production 里的 mock 也丢掉', async () => {
+  it('日常覆盖保留 yir、fal、opengen；nanoapi 丢掉。production 里的 mock 也丢掉', async () => {
     store('videoProvider', JSON.stringify('yir'))
     const loaded = await getSettings({ ...env(), APP_ENV: 'development', VIDEO_PROVIDER: 'fal' })
-    expect(loaded.videoProvider).toBeNull()
-    expect(storedVideoProvider({ videoProvider: 'yir' }, { APP_ENV: 'development' })).toBeNull()
+    expect(loaded.videoProvider).toBe('yir')
+    expect(storedVideoProvider({ videoProvider: 'yir' }, { APP_ENV: 'development' })).toBe('yir')
+    expect(storedVideoProvider({ videoProvider: 'fal' }, { APP_ENV: 'production' })).toBe('fal')
+    expect(storedVideoProvider({ videoProvider: 'nanoapi' }, { APP_ENV: 'development' })).toBeNull()
 
     sqlite.prepare(`UPDATE settings SET value = ? WHERE key = 'videoProvider'`).run(JSON.stringify('opengen'))
     kv.store.clear()

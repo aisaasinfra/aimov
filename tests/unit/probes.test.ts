@@ -164,11 +164,11 @@ describe('支付探测', () => {
 })
 
 describe('视频服务商探测', () => {
-  it('fal：显式探测才查余额；日常解析不把 fal 当 auto', async () => {
+  it('fal：日常解析和显式探测都查所选渠道的余额', async () => {
     const env = { VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', APP_ENV: 'production' }
     const calls = stubFetch({ 'api.fal.ai/v1/account/billing': { body: { credits: { current_balance: 42.5, currency: 'USD' } } } })
     const explicit = await runProbe(env as unknown as Env, 'video', admin, { provider: 'fal' })
-    expect(explicit).toMatchObject({ status: 'ok', message: '鉴权正常，余额 42.50 USD', provider: 'fal' })
+    expect(explicit).toMatchObject({ status: 'ok', message: 'FAL 已配置成功。鉴权正常，余额 42.50 USD', provider: 'fal' })
     expect(calls[0]).toEqual({ url: 'https://api.fal.ai/v1/account/billing?expand=credits', auth: 'Key fal_key_abcdefgh' })
 
     stubFetch({ 'api.fal.ai': { body: { credits: { current_balance: 1.2 } } } })
@@ -176,11 +176,13 @@ describe('视频服务商探测', () => {
     stubFetch({ 'api.fal.ai': { status: 403 } })
     expect((await runProbe(env as unknown as Env, 'video', admin, { provider: 'fal' })).message).toContain('billing:usage:read')
     stubFetch({ 'api.fal.ai': { status: 401 } })
-    expect(await runProbe(env as unknown as Env, 'video', admin, { provider: 'fal' })).toMatchObject({ status: 'fail', message: 'FAL_KEY 无效' })
+    expect(await runProbe(env as unknown as Env, 'video', admin, { provider: 'fal' })).toMatchObject({ status: 'fail', message: 'FAL 已配置失败：FAL_KEY 无效' })
 
+    stubFetch({ 'api.fal.ai/v1/account/billing': { body: { credits: { current_balance: 42.5, currency: 'USD' } } } })
     const daily = await probe('video', env)
-    expect(daily.provider).toBe('opengen')
-    expect(daily.message).toContain('未配置')
+    expect(daily.provider).toBe('fal')
+    expect(daily.message).toContain('已配置成功')
+    expect(daily.message).toContain('鉴权正常，余额')
     expect(daily.message).not.toContain('fal_key')
   })
 
@@ -190,8 +192,8 @@ describe('视频服务商探测', () => {
     expect(await runProbe(env as unknown as Env, 'video', admin, { provider: 'yir' })).toMatchObject({ status: 'warn', provider: 'yir' })
     expect(calls[0]?.auth).toBe('Bearer yir_key_abcdefgh')
     stubFetch({ 'gateway.yir.ai': { body: {} } })
-    expect(await runProbe(env as unknown as Env, 'video', admin, { provider: 'yir' })).toMatchObject({ status: 'warn', message: '鉴权正常，但读不到余额' })
-    expect(await runProbe({ VIDEO_PROVIDER: 'yir' } as unknown as Env, 'video', admin, { provider: 'yir' })).toMatchObject({ status: 'fail', message: 'YIR_API_KEY 未配置' })
+    expect(await runProbe(env as unknown as Env, 'video', admin, { provider: 'yir' })).toMatchObject({ status: 'warn', message: 'Yir 已配置成功。鉴权正常，但读不到余额' })
+    expect(await runProbe({ VIDEO_PROVIDER: 'yir' } as unknown as Env, 'video', admin, { provider: 'yir' })).toMatchObject({ status: 'fail', message: 'Yir 未配置：需要 YIR_API_KEY' })
   })
 
   it('nanoapi：查 /v1/balance，余额在 data 里；401 fail，余额偏低提示；mock 不要求密钥', async () => {
@@ -222,7 +224,7 @@ describe('视频服务商探测', () => {
       { provider: 'fal' },
     )
     expect(result.status).toBe('fail')
-    expect(result.message).toBe('connect failed for Key *** (OPENAI ***)')
+    expect(result.message).toBe('FAL 已配置失败：connect failed for Key *** (OPENAI ***)')
   })
 
   it('env 是 fal、运行时是 opengen：健康检查抛错时标签仍是 opengen，且说明不含密钥', async () => {
@@ -249,14 +251,14 @@ describe('视频服务商探测', () => {
     expect(result.message).toContain('***')
   })
 
-  it('运行时存 yir 不是日常 auto；显式目标才查 yir', async () => {
+  it('运行时存 yir 就探测 yir；显式目标仍可单独查 yir', async () => {
     const calls = stubFetch({ 'gateway.yir.ai/v1/balance': { body: { available_amount: 20, currency: 'USD' } } })
     const daily = await runProbe({ VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', YIR_API_KEY: 'yir_key_abcdefgh', APP_ENV: 'development' } as unknown as Env, 'video', admin, {
       settings: { videoProvider: 'yir' },
     })
-    expect(daily.provider).toBe('opengen')
-    expect(daily.message).toContain('未配置')
-    expect(calls.some((call) => call.url.includes('gateway.yir.ai'))).toBe(false)
+    expect(daily.provider).toBe('yir')
+    expect(daily.message).toContain('已配置成功')
+    expect(calls.some((call) => call.url.includes('gateway.yir.ai'))).toBe(true)
     const explicit = await runProbe({ YIR_API_KEY: 'yir_key_abcdefgh', APP_ENV: 'development' } as unknown as Env, 'video', admin, { provider: 'yir' })
     expect(explicit).toMatchObject({ status: 'ok', provider: 'yir' })
   })
@@ -313,21 +315,24 @@ describe('视频服务商探测', () => {
     expect(denied.message).not.toContain('未配置')
   })
 
-  it('库里的 yir 覆盖不当成日常 auto；production 里存的 mock 丢掉后仍是 OpenGen 未配置', async () => {
+  it('库里的 yir 覆盖就是日常 auto；production 里存的 mock 丢掉后改走环境里的 fal', async () => {
     const sqlite = new DatabaseSync(':memory:')
     migrate(sqlite)
     sqlite.prepare(`INSERT INTO settings (key, value, updated_at) VALUES ('videoProvider', ?, '2026-10-26')`).run(JSON.stringify('yir'))
     const kv = kvShim()
     const db = d1Shim(sqlite)
-    const calls = stubFetch({ 'gateway.yir.ai/v1/balance': { body: { available_amount: 20, currency: 'USD' } } })
+    const calls = stubFetch({
+      'gateway.yir.ai/v1/balance': { body: { available_amount: 20, currency: 'USD' } },
+      'api.fal.ai/v1/account/billing': { body: { credits: { current_balance: 42.5, currency: 'USD' } } },
+    })
     const runtime = await runProbe(
       { DB: db, KV: kv, VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_key_abcdefgh', YIR_API_KEY: 'yir_key_abcdefgh', APP_ENV: 'development' } as unknown as Env,
       'video',
       admin,
     )
-    expect(runtime.provider).toBe('opengen')
-    expect(runtime.message).toContain('未配置')
-    expect(calls.some((call) => call.url.includes('gateway.yir.ai'))).toBe(false)
+    expect(runtime.provider).toBe('yir')
+    expect(runtime.message).toContain('已配置成功')
+    expect(calls.some((call) => call.url.includes('gateway.yir.ai'))).toBe(true)
 
     sqlite.prepare(`UPDATE settings SET value = ? WHERE key = 'videoProvider'`).run(JSON.stringify('mock'))
     kv.store.clear()
@@ -336,8 +341,9 @@ describe('视频服务商探测', () => {
       'video',
       admin,
     )
-    expect(dropped.provider).toBe('opengen')
-    expect(dropped.message).toContain('未配置')
+    expect(dropped.provider).toBe('fal')
+    expect(dropped.message).toContain('已配置成功')
+    expect(dropped.message).not.toContain('未配置')
     expect(dropped.message).not.toContain('fal_key')
   })
 })

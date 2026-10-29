@@ -38,6 +38,13 @@ const ok = (message: string): Outcome => ({ status: 'ok', message })
 const warn = (message: string): Outcome => ({ status: 'warn', message })
 const fail = (message: string): Outcome => ({ status: 'fail', message })
 
+// 已配置成功 / 已配置失败 / 未配置 必须能从文案分开。连接失败不要写成未配置。
+function markConfigured(channel: string, outcome: Outcome): Outcome {
+  if (outcome.message.includes('未配置')) return outcome
+  if (outcome.status === 'fail') return fail(`${channel} 已配置失败：${outcome.message}`)
+  return { ...outcome, message: `${channel} 已配置成功。${outcome.message}` }
+}
+
 async function probeStorage(env: Env): Promise<Outcome> {
   const key = `_probe/${createId('prb')}`
   await env.MEDIA.put(key, 'probe')
@@ -219,7 +226,7 @@ async function probeResolved(env: Env, id: VideoProviderId): Promise<{ label: st
   }
 }
 
-// 与新工单同一次解析（describeAutoRoute）。options.provider 仍可显式探测 fal / yir / nanoapi。
+// 与新工单同一次解析（describeAutoRoute）。options.provider 仍可显式探测 fal / yir / opengen / nanoapi。
 async function resolveVideoProbe(
   env: Env,
   options?: { provider?: string; settings?: { videoProvider?: string | null } },
@@ -234,7 +241,7 @@ async function resolveVideoProbe(
   const settings = options?.settings ?? (await loadVideoSettings(env))
   try {
     const route = describeAutoRoute(env, settings)
-    if (!route.ok) return { label: route.code === 'emergency_switch_conflict' ? 'emergency' : 'opengen', outcome: fail(route.message) }
+    if (!route.ok) return { label: route.provider, outcome: fail(route.message) }
     return await probeResolved(env, route.provider)
   } catch (error) {
     return { label: env.VIDEO_PROVIDER || '(未配置)', outcome: probeFailure(error) }
@@ -246,22 +253,47 @@ async function loadVideoSettings(env: Env): Promise<{ videoProvider: string | nu
   return getSettings(env)
 }
 
+async function probeFalAccount(env: Env): Promise<Outcome> {
+  const key = cleanSecret(env.FAL_KEY)
+  if (!key) return fail('FAL 未配置：需要 FAL_KEY')
+  let response: Response
+  try {
+    response = await fetch('https://api.fal.ai/v1/account/billing?expand=credits', { headers: { Authorization: `Key ${key}` } })
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'network')
+  }
+  if (response.status === 401) return fail('FAL_KEY 无效')
+  // Key 有效但权限范围不含 billing:usage:read：不影响生成，只是查不到余额
+  if (response.status === 403) return warn('FAL_KEY 有效，但没有 billing:usage:read 权限，查不到余额（不影响生成）')
+  if (!response.ok) return fail(`查询余额返回 HTTP ${response.status}`)
+  const body = (await response.json().catch(() => null)) as { credits?: { current_balance?: unknown; currency?: unknown } } | null
+  const balance = Number(body?.credits?.current_balance)
+  if (!Number.isFinite(balance)) return warn('鉴权正常，但读不到余额')
+  return balanceOutcome(balance, String(body?.credits?.currency ?? 'USD'), ' fal ')
+}
+
+async function probeYirAccount(env: Env): Promise<Outcome> {
+  const key = cleanSecret(env.YIR_API_KEY)
+  if (!key) return fail('Yir 未配置：需要 YIR_API_KEY')
+  let response: Response
+  try {
+    response = await fetch('https://gateway.yir.ai/v1/balance', { headers: { Authorization: `Bearer ${key}` } })
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'network')
+  }
+  if (response.status === 401) return fail('YIR_API_KEY 无效')
+  if (!response.ok) return fail(`查询余额返回 HTTP ${response.status}`)
+  const body = (await response.json().catch(() => null)) as { available_amount?: unknown; currency?: unknown } | null
+  const available = Number(body?.available_amount)
+  if (!Number.isFinite(available)) return warn('鉴权正常，但读不到余额')
+  return balanceOutcome(available, String(body?.currency ?? 'USD'), ' yir ')
+}
+
 async function probeVideo(env: Env, id: VideoProviderId): Promise<Outcome> {
   if (id === 'mock') return ok('mock 视频服务商，不调用外部接口')
-  if (id === 'opengen') return probeOpenGen(env)
-  if (id === 'fal') {
-    const key = cleanSecret(env.FAL_KEY)
-    if (!key) return fail('FAL_KEY 未配置')
-    const response = await fetch('https://api.fal.ai/v1/account/billing?expand=credits', { headers: { Authorization: `Key ${key}` } })
-    if (response.status === 401) return fail('FAL_KEY 无效')
-    // Key 有效但权限范围不含 billing:usage:read：不影响生成，只是查不到余额
-    if (response.status === 403) return warn('FAL_KEY 有效，但没有 billing:usage:read 权限，查不到余额（不影响生成）')
-    if (!response.ok) return fail(`查询余额返回 HTTP ${response.status}`)
-    const body = (await response.json().catch(() => null)) as { credits?: { current_balance?: unknown; currency?: unknown } } | null
-    const balance = Number(body?.credits?.current_balance)
-    if (!Number.isFinite(balance)) return warn('鉴权正常，但读不到余额')
-    return balanceOutcome(balance, String(body?.credits?.currency ?? 'USD'), ' fal ')
-  }
+  if (id === 'opengen') return markConfigured('OpenGen', await probeOpenGen(env))
+  if (id === 'fal') return markConfigured('FAL', await probeFalAccount(env))
+  if (id === 'yir') return markConfigured('Yir', await probeYirAccount(env))
   if (id === 'nanoapi') {
     const key = cleanSecret(env.NANOAPI_API_KEY)
     if (!key) return fail('NANOAPI_API_KEY 未配置')
@@ -273,16 +305,7 @@ async function probeVideo(env: Env, id: VideoProviderId): Promise<Outcome> {
     if (!Number.isFinite(available)) return warn('鉴权正常，但读不到余额')
     return balanceOutcome(available, String(body?.data?.currency ?? 'USD'), ' NanoAPI ')
   }
-  if (id !== 'yir') return fail(`不支持的视频渠道：${id}`)
-  const key = cleanSecret(env.YIR_API_KEY)
-  if (!key) return fail('YIR_API_KEY 未配置')
-  const response = await fetch('https://gateway.yir.ai/v1/balance', { headers: { Authorization: `Bearer ${key}` } })
-  if (response.status === 401) return fail('YIR_API_KEY 无效')
-  if (!response.ok) return fail(`查询余额返回 HTTP ${response.status}`)
-  const body = (await response.json().catch(() => null)) as { available_amount?: unknown; currency?: unknown } | null
-  const available = Number(body?.available_amount)
-  if (!Number.isFinite(available)) return warn('鉴权正常，但读不到余额')
-  return balanceOutcome(available, String(body?.currency ?? 'USD'), ' yir ')
+  return fail(`不支持的视频渠道：${id}`)
 }
 
 async function probeModeration(env: Env): Promise<Outcome> {

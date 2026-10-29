@@ -66,24 +66,30 @@ describe('queryVideoBalance', () => {
     expect(yirCalls).toHaveLength(1)
   })
 
-  it('日常 fal 环境不查 fal；应急开关打开且 OpenGen 未配置时，HTTP 非 2xx 仍抛出', async () => {
-    const daily = stubFetch(() => {
-      throw new Error('daily auto must not call fal')
+  it('所选 fal 会查 fal；所选 OpenGen 不因应急变量改查 fal；fal 的 HTTP 非 2xx 仍抛出', async () => {
+    const daily = stubFetch(() => json({ credits: { current_balance: 9, currency: 'USD' } }))
+    expect(await fetchVideoBalance({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_test', EMERGENCY_VIDEO_PROVIDER: '' } as unknown as Env)).toEqual({
+      provider: 'fal',
+      amount: 9,
+      currency: 'USD',
     })
-    expect(await fetchVideoBalance({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_test', EMERGENCY_VIDEO_PROVIDER: '' } as unknown as Env)).toBeNull()
-    expect(daily).toEqual([])
+    expect(daily).toEqual(['https://api.fal.ai/v1/account/billing?expand=credits'])
 
-    stubFetch(() => new Response('nope', { status: 502 }))
-    await expect(
-      fetchVideoBalance({
+    const other = stubFetch(() => new Response('nope', { status: 502 }))
+    expect(
+      await fetchVideoBalance({
         APP_ENV: 'production',
         VIDEO_PROVIDER: 'opengen',
         EMERGENCY_VIDEO_PROVIDER: 'fal',
         FAL_KEY: 'fal_test',
-        OPENGEN_BASE_URL: '',
-        OPENGEN_API_KEY: '',
+        OPENGEN_BASE_URL: 'https://og.example',
+        OPENGEN_API_KEY: 'ogsk_site',
         OPENGEN_STUB: '0',
       } as unknown as Env),
-    ).rejects.toThrow('video balance HTTP 502')
+    ).toBeNull()
+    expect(other).toEqual([])
+
+    stubFetch(() => new Response('nope', { status: 502 }))
+    await expect(fetchVideoBalance({ APP_ENV: 'production', VIDEO_PROVIDER: 'fal', FAL_KEY: 'fal_test' } as unknown as Env)).rejects.toThrow('video balance HTTP 502')
   })
 })

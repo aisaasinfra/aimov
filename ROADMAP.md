@@ -201,13 +201,22 @@
   - 媒体：NanoAPI 下载素材用浏览器 UA，读视频要 Range。不支持 Range 或不带扩展名的视频地址都以 `internal_error` 失败，并全额退款。
   - 未在 aimov 验证：后台“测试连接”按钮、付费出片。
 
+**#38 站级生成渠道同级可选**（2026-10-29）
+
+- 人工轨保留：`fulfillmentMode=manual` 仍扣积分、写 Sheet 镜像、人回填。
+- 日常 `auto` 在 Yir / FAL / OpenGen 中三选一（同级可选，选哪个走哪个）。后台可直接保存并走 Yir 或 FAL，不必经 `EMERGENCY_VIDEO_PROVIDER`。
+- 一单一所有权：创建时写入 `generations.provider`。切换约 60 秒后只影响新单。在途单不改道、不双扣。
+- 密钥按所选渠道。缺配在扣积分前拒绝，文案含「未配置」。选 OpenGen 不要求站上有 FAL / Yir Key。
+- `nanoapi` 适配器保留，不进日常必选，也不删除。是否并入待确认。
+- OpenGen 网关内多上游或 failover 不是本站三选一的前置。不宣称生产收口或④就绪。
+
 **#37 生成履约链路（站点侧）**（2026-10-28）
 
-- 全站 `fulfillmentMode`。日常 `auto` 只走 OpenGen。不能自动的组件在扣费前拒绝。
+- 全站 `fulfillmentMode`。2026-10-28 曾把日常 `auto` 锁成只走 OpenGen。该日常产品锁已由 #38 改为 Yir / FAL / OpenGen 三选一。不能自动的组件仍在扣费前拒绝。
 - D1 保存 `component_id` / `component_version`。冻结期只有一图加源视频可自动。jobs 正文不带组件 id。
-- 提交前不可达：同一 `generation_id` 改人工。结果不明则冻结在 OpenGen。任务 id 写下后不再改人工。Webhook 只触发轮询。
+- 所选渠道是 OpenGen 且提交前不可达：同一 `generation_id` 改人工。结果不明则冻结在 OpenGen。任务 id 写下后不再改人工。Webhook 只触发轮询。直接选 Yir 或 FAL 时不套用这条改人工。
 - 人工单通知 `ADMIN_EMAILS`。Sheet 去重，且不是领取锁。没有写死 SLA 分钟数。
-- `EMERGENCY_VIDEO_PROVIDER` 默认关，和 OpenGen 同时配置则失败关闭。配置检查能区分未配置、不可达和不健康。不把隧道、本机或 stub 写成④就绪。
+- 2026-10-28 曾让 `EMERGENCY_VIDEO_PROVIDER` 与 OpenGen 同时配置时拒绝新单。#38 起该变量不再参与选路。配置检查仍能区分未配置、不可达和不健康。不把隧道、本机或 stub 写成④就绪。
 - 未做：OpenGen 内多上游串行、组件包发布、④现场切换证据、全量组件目录、Sheet 列重设计、SLA 分钟数。功能05 的生产收口和功能07 的④就绪都还没有验收证据。
 
 **#36 生成履行开关**（2026-10-27）

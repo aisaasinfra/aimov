@@ -1,62 +1,50 @@
-// 新的 auto 工单走哪条通道。飞行中的行仍读 generations.provider，不经过这里。
-// 日常 auto 只有 OpenGen。fal / yir / nanoapi 只在默认关闭的应急开关里出现，并且不能和 OpenGen 同时配置。
-// VIDEO_PROVIDER=fal|yir|nanoapi 不是目标态 auto。
+// 新的 auto 工单在 Yir / FAL / OpenGen 中三选一（选哪个走哪个）。
+// 飞行中的行仍读 generations.provider，不经过这里。
+// settings.videoProvider 覆盖优先于 env.VIDEO_PROVIDER。
+// EMERGENCY_VIDEO_PROVIDER 不参与选路，也不再因为和 OpenGen 同时存在而拒绝新单。
+// nanoapi 适配器仍在，供在途工单使用，但不进入日常三选一（是否并入待确认）。
 
 import { cleanSecret, isProduction } from './util'
-import { openGenStubEnabled } from './video/opengen'
+import { describeOpenGenConfig } from './video/opengen'
 
-export const EMERGENCY_PROVIDER_IDS = ['fal', 'yir', 'nanoapi'] as const
-export type EmergencyProviderId = (typeof EMERGENCY_PROVIDER_IDS)[number]
-export type AutoRouteProvider = 'opengen' | 'mock' | EmergencyProviderId
-
-const NOT_CONFIGURED = 'OpenGen 未配置：需要 OPENGEN_BASE_URL 和 OPENGEN_API_KEY'
+export type AutoRouteProvider = 'yir' | 'fal' | 'opengen' | 'mock'
 
 export type AutoRoute =
-  | { ok: true; provider: AutoRouteProvider; fulfillment: 'opengen' | 'mock' | 'emergency' }
-  | { ok: false; status: 503; code: 'emergency_switch_invalid' | 'emergency_switch_conflict' | 'provider_not_configured'; message: string }
+  | { ok: true; provider: AutoRouteProvider; fulfillment: AutoRouteProvider }
+  | { ok: false; status: 503; code: 'provider_not_configured'; provider: string; message: string }
 
-export function parseEmergencyProvider(raw: string | undefined): EmergencyProviderId | null | 'invalid' {
-  const value = (raw ?? '').trim()
-  if (!value) return null
-  if ((EMERGENCY_PROVIDER_IDS as readonly string[]).includes(value)) return value as EmergencyProviderId
-  return 'invalid'
+function allow(provider: AutoRouteProvider): AutoRoute {
+  return { ok: true, provider, fulfillment: provider }
 }
 
-// stub、任一连接密钥、或任一非空 base URL 都算「OpenGen 已接上」。半截配置也算，用来失败关闭应急开关。
-export function openGenConnectionConfigured(env: {
-  APP_ENV?: string
-  OPENGEN_STUB?: string
-  OPENGEN_BASE_URL?: string
-  OPENGEN_API_KEY?: string
-}): boolean {
-  if (openGenStubEnabled(env)) return true
-  if (cleanSecret(env.OPENGEN_API_KEY)) return true
-  return Boolean((env.OPENGEN_BASE_URL ?? '').trim())
+function reject(provider: string, message: string): AutoRoute {
+  return { ok: false, status: 503, code: 'provider_not_configured', provider, message }
 }
 
 export function describeAutoRoute(env: Env, settings?: { videoProvider?: string | null } | null): AutoRoute {
-  const emergency = parseEmergencyProvider(env.EMERGENCY_VIDEO_PROVIDER)
-  if (emergency === 'invalid') {
-    return { ok: false, status: 503, code: 'emergency_switch_invalid', message: '应急开关 EMERGENCY_VIDEO_PROVIDER 无效' }
-  }
-  if (emergency && openGenConnectionConfigured(env)) {
-    return {
-      ok: false,
-      status: 503,
-      code: 'emergency_switch_conflict',
-      message: '应急开关与 OpenGen 同时配置，已失败关闭。不是未配置。',
-    }
-  }
-  if (emergency) return { ok: true, provider: emergency, fulfillment: 'emergency' }
-
   const override = settings?.videoProvider
-  const selected = typeof override === 'string' && override ? override : (env.VIDEO_PROVIDER ?? '')
-  // 应急开关优先于开发 mock。mock 只在 development / preview，且没有应急开关时，给本地和 e2e。
-  if (!isProduction(env) && selected === 'mock') return { ok: true, provider: 'mock', fulfillment: 'mock' }
+  const selected = (typeof override === 'string' && override.trim() ? override.trim() : (env.VIDEO_PROVIDER ?? '').trim())
 
-  // 日常 auto。settings 或 VIDEO_PROVIDER 里的 fal / yir / nanoapi 不选为通道。
-  if (!openGenConnectionConfigured(env)) {
-    return { ok: false, status: 503, code: 'provider_not_configured', message: NOT_CONFIGURED }
+  if (selected === 'mock' && !isProduction(env)) return allow('mock')
+
+  if (selected === 'yir') {
+    if (!cleanSecret(env.YIR_API_KEY)) return reject('yir', 'Yir 未配置：需要 YIR_API_KEY')
+    return allow('yir')
   }
-  return { ok: true, provider: 'opengen', fulfillment: 'opengen' }
+  if (selected === 'fal') {
+    if (!cleanSecret(env.FAL_KEY)) return reject('fal', 'FAL 未配置：需要 FAL_KEY')
+    return allow('fal')
+  }
+  if (selected === 'opengen') {
+    const config = describeOpenGenConfig(env)
+    if (config.mode === 'missing') return reject('opengen', config.message)
+    return allow('opengen')
+  }
+  if (selected === 'nanoapi') {
+    return reject('nanoapi', 'nanoapi 未配置为日常渠道。请在 Yir、FAL、OpenGen 中三选一。适配器仍保留给在途工单。')
+  }
+  if (selected === 'mock') {
+    return reject('mock', 'mock 未配置为日常渠道：production / staging 不能使用 mock。请选择 Yir、FAL 或 OpenGen。')
+  }
+  return reject(selected || '(空)', `视频渠道未配置：请选择 Yir、FAL 或 OpenGen（当前 ${selected || '空'}）`)
 }

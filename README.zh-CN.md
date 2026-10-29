@@ -19,7 +19,7 @@ https://github.com/user-attachments/assets/895aab94-d0c9-474e-8d90-61a6c551e536
 - 前端/SSR：TanStack Start（React 19）+ Tailwind 4。公开语言按切换器顺序：`/` 英文（无前缀），然后 `/de`、`/es`、`/fr`、`/pt-BR`，繁体中文 `/zh-TW` 排在最后。没有简体中文站点语言。
 - API：Hono（`/api/*`、`/media/*`、`/sitemap.xml`、`/robots.txt`、`/llms.txt`、`/llms-full.txt`、`/docs-md/*`、IndexNow key 文件），入口 `src/server.ts`
 - 支付：Waffo Pancake（默认）、Dodo Payments，均为 MoR；也可用 Stripe（你自己是商户，销售税自己处理）；`mock` 仅用于本地和 e2e
-- 视频：日常 auto 走 OpenGen（`OPENGEN_BASE_URL` + 本站 `OPENGEN_API_KEY`）。`mock` 只用于本地和 e2e。fal、yir、NanoAPI 不是日常 auto 通道。见下文“视频服务商”
+- 视频：`fulfillmentMode=auto` 时，后台在 Yir、FAL、OpenGen 中三选一（同级可选，选哪个走哪个）。`mock` 只用于本地和 e2e。NanoAPI 适配器留给在途工单，不进日常下拉（是否并入待确认）。见下文“视频服务商”
 - 已具备：
   - 用户与积分：Google 登录（含 One Tap）、积分包、月付和年付订阅、积分流水、个人中心（视频/账单/设置/兑换码/邀请链接/注销/导出我的数据）；账单显示实付与退款，订单和积分流水可分页加载，每笔订单有可打印的详情页（税务发票由支付商出具）
   - 订单与生成：订单与部分/全额退款回收、生成任务队列（含死信队列）与失败退积分
@@ -136,7 +136,7 @@ npx wrangler r2 object put <name>-media/templates/<file>.mp4 --file seed/templat
 ```
 
 - `ratelimits[].namespace_id` 在同一账号内要唯一，多个站点不要共用同一组数字。
-- 密钥：`SESSION_SECRET`、`GOOGLE_CLIENT_SECRET`、`WAFFO_MERCHANT_ID`、`WAFFO_PRIVATE_KEY`、`DODO_API_KEY`、`DODO_WEBHOOK_SECRET`、`OPENGEN_API_KEY`（本部署自己的 `ogsk_`，不是厂商 Key）；用 Stripe 时是 `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`；图片审核和 Turnstile 打开时再加 `OPENAI_API_KEY`、`TURNSTILE_SECRET_KEY`。`FAL_KEY`、`YIR_API_KEY`、`NANOAPI_API_KEY` 只给默认关闭的应急开关，或创建时已经走这些厂商的旧工单。日常 auto 不要把它们放进生产 Worker。可以逐个 `npx wrangler secret put <NAME>`，也可以用 `scripts/sync-secrets.mjs` 一次同步：
+- 密钥：`SESSION_SECRET`、`GOOGLE_CLIENT_SECRET`、`WAFFO_MERCHANT_ID`、`WAFFO_PRIVATE_KEY`、`DODO_API_KEY`、`DODO_WEBHOOK_SECRET`、`OPENGEN_API_KEY`（本部署自己的 `ogsk_`，不是厂商 Key）；用 Stripe 时是 `STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`；图片审核和 Turnstile 打开时再加 `OPENAI_API_KEY`、`TURNSTILE_SECRET_KEY`。选 Yir 配 `YIR_API_KEY`，选 FAL 配 `FAL_KEY`，选 OpenGen 配 `OPENGEN_BASE_URL` 和本站 `OPENGEN_API_KEY`（`ogsk_`）。选 OpenGen 不要求站上有 FAL 或 Yir 密钥。`NANOAPI_API_KEY` 只给创建时已经是 nanoapi 的在途工单。可以逐个 `npx wrangler secret put <NAME>`，也可以用 `scripts/sync-secrets.mjs` 一次同步：
   ```bash
   cp .dev.vars.example .dev.vars.production     # 填上线用的值；.dev.vars.* 已被 .gitignore 忽略
   node scripts/sync-secrets.mjs                 # 只出计划：新增、已存在、只在远端、同步后仍缺，不打印任何值
@@ -228,7 +228,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
 - **PayPal / PayPal.cn**：与全球站共用 Orders v2（`PAYPAL_MODE=sandbox|live`），没有单独的中国支付 API。只卖积分包；订阅留在 Waffo（若 `PAYMENT_PROVIDER` 是 Dodo 或 Stripe，则留在那一家）。密钥：`PAYPAL_CLIENT_ID`、`PAYPAL_CLIENT_SECRET`、`PAYPAL_WEBHOOK_ID`（不要填字面量 `WEBHOOK_ID`）。`PAYPAL_PRODUCTS` 可以保持 `{}`。
   - webhook 订阅 `CHECKOUT.ORDER.APPROVED`、`PAYMENT.CAPTURE.COMPLETED`、`PAYMENT.CAPTURE.DENIED`、`PAYMENT.CAPTURE.REFUNDED`、`PAYMENT.CAPTURE.REVERSED`、`PAYMENT.CAPTURE.PARTIALLY_REFUNDED`。只有 capture 完成才入账。退款窗口 180 天，可多次部分退款。
   - 验签用传输头和 PayPal 证书（对原始 body 的 CRC-32 做 RSA-SHA256）。细节见 [docs/payments.md](docs/payments.md)。还没有 sandbox e2e。
-- **fal、yir、NanoAPI、OpenGen**：webhook 只排一次轮询。正文不是成功信号，也不是成片。日常 auto 只用 `OPENGEN_API_KEY` 向 OpenGen 查询。fal / yir / nanoapi 的密钥不在这条路上。每 5 分钟的 Cron 对非人工单超过 45 分钟失败并退一次积分，不扫 `manual`。退款之后的迟到结果不改终态。本地 `VIDEO_PROVIDER=mock` 不调用这些主机。OpenGen 的厂商 Key 留在 OpenGen 主机。
+- **fal、yir、NanoAPI、OpenGen**：webhook 只排一次轮询。正文不是成功信号，也不是成片。轮询读 `generations.provider`，并用这一家的密钥查询。每 5 分钟的 Cron 对非人工单超过 45 分钟失败并退一次积分，不扫 `manual`。退款之后的迟到结果不改终态。本地 `VIDEO_PROVIDER=mock` 不调用这些主机。OpenGen 的厂商 Key 留在 OpenGen 主机。
 
 ## 关键设计
 
@@ -262,7 +262,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - 退款事件先于付款事件到达（付款回调还在重试）时记为失败并返回 5xx，等付款入账后由支付商重试。
   - webhook 丢失或迟到时主动向支付商查单（`src/server/reconcile.ts`；Dodo 查 checkout session 再取 payment，Stripe 查 checkout session（带账单行和账单），Waffo 用 GraphQL `payments` 按商户订单号查）：成功页在约 15 秒和 60 秒时各查一次；5 分钟 Cron 查创建 10 分钟到 24 小时之间的 pending 订单，指数退避（约 10、20、40……分钟，每轮最多 10 单）；后台订单详情有“查单”按钮，补单前先用。查到的付款和 webhook 走同一套核对与幂等键，迟到的 webhook 不会重复入账。浏览器只能传订单号，不能传付款状态。已有 `mismatch` 事件的订单留给人工核对。
 - **生成**：先扣积分再入队，失败、超时或管理员判失败时自动退回。视频服务商的 webhook 和定时轮询可能同时处理同一个任务，只有一路能把任务置为成功，另一路不会删掉已落库的成片。
-- **履行**：站点设置 `fulfillmentMode` 为 `manual`（没存过时默认）或 `auto`，全站一个值。`auto` 只提交并轮询 OpenGen。不能自动的组件在扣积分前拒绝。`manual` 仍扣积分并写入 `generations`（`provider=manual`、`status=queued`），不调厂商、不进 `VIDEO_QUEUE`；往 Google Sheet 镜像一行（服务账号，密钥见 [docs/env.md](docs/env.md)），给用户发排队邮件，并给 `ADMIN_EMAILS` 发新人工单通知。Sheet 不是领取锁。写失败只记在 `provider_meta.sheetError`。后台可列出人工单，粘贴成品 `https` 地址（按厂商成片同样转存 R2），或用现有账本标记失败并退积分。收款不变。见 [docs/opengen.md](docs/opengen.md)。
+- **履行**：站点设置 `fulfillmentMode` 为 `manual`（没存过时默认）或 `auto`，全站一个值。`auto` 在 Yir、FAL、OpenGen 中三选一（同级可选，选哪个走哪个），只提交并轮询所选的那一家。不能自动的组件在扣积分前拒绝。缺所选密钥时也在扣积分前拒绝，文案含「未配置」。`manual` 仍扣积分并写入 `generations`（`provider=manual`、`status=queued`），不调厂商、不进 `VIDEO_QUEUE`；往 Google Sheet 镜像一行（服务账号，密钥见 [docs/env.md](docs/env.md)），给用户发排队邮件，并给 `ADMIN_EMAILS` 发新人工单通知。Sheet 不是领取锁。写失败只记在 `provider_meta.sheetError`。后台可列出人工单，粘贴成品 `https` 地址（按厂商成片同样转存 R2），或用现有账本标记失败并退积分。收款不变。见 [docs/opengen.md](docs/opengen.md)。
 - **成片分享**：用户在个人中心对自己的成片点“分享”，生成公开链接 `/v/<随机串>`（16 位，不可枚举，带语言前缀如 `/zh-TW/v/…` 同样可用）。默认开启；`site.share.enabled` 设为 `false` 时按钮和页面都不出现，换脸、真人类站点建议关闭。
   - 分享页只有视频、AI 角标与声明、“我也做一条”按钮和举报入口，不显示作者信息，HTML 和接口里也没有视频 ID。响应头和 meta 都是 `noindex`，不进 sitemap。
   - 链接预览：开启分享时浏览器从成片截一帧，画成 1200×630 的 JPEG（左上角带 AI 标识）一起上传，作为 `og:image`，成片地址写进 `og:video`。封面和上传照片一样过图片审核（不通过返回 422 `share_rejected`）；截帧失败（浏览器解码不了、超时）时不带封面，用站点默认 OG 图。
@@ -273,7 +273,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - fal 按帧计费，16 帧算 1 个视频秒，480p 为 $0.04/视频秒（[价格](https://fal.ai/models/fal-ai/wan/v2.2-14b/animate/replace)）。模板源视频是 24fps，所以成片每秒 6 美分，18 秒约 $1.08。换模型、分辨率或源视频帧率时更新 `costCentsPerVideoSecond` 和 `sourceFps`。
   - 出片后才被判失败的任务（超时、管理员判失败）照样记成本；没出片的失败任务不记。mock 记 0。
   - 后台概览显示近 30 天的服务商成本、消耗积分折算的收入和估算毛利；生成列表逐条显示成本和毛利。每积分实收 = USD 已支付订单的净实收 ÷ 未回收的积分。实际扣费以服务商账单为准。
-- **视频服务商**：`VIDEO_PROVIDER` 可选 `fal`（默认）、`yir`、`nanoapi`、`opengen` 或 `mock`。管理员可在 `/admin/settings` 的「当前视频生成渠道」覆盖它。新工单把选择写入 `generations.provider`；已经排队的工单继续用创建时的渠道。保存成和 `VIDEO_PROVIDER` 相同的值会删掉覆盖。`APP_ENV` 为 `production` 或 `staging` 时列表里没有 `mock`。[yir.ai](https://yir.ai/?ref=qianshuixia) 是图片视频 API 网关，启用方法：`VIDEO_PROVIDER=yir`，secret 写 `YIR_API_KEY`，模型和提示词在 `site.video.yir` 里改（`src/server/video/yir.ts`）。本地和 e2e 仍用 `mock`。
+- **视频服务商**：日常 `auto` 在 Yir、FAL、OpenGen 中三选一（同级可选，选哪个走哪个）。后台下拉是这三项，development / preview 另有 `mock`。`nanoapi` 仍可执行在途工单，不在日常下拉里（待确认：不作为必选第四项，也不删除适配器）。`EMERGENCY_VIDEO_PROVIDER` 不再参与选路。环境变量本身已是日常渠道时，保存成相同的值会删掉覆盖。新工单把选择写入 `generations.provider`；已经排队的工单继续用创建时的渠道。切换约 60 秒后只影响新工单。`APP_ENV` 为 `production` 或 `staging` 时列表里没有 `mock`。[yir.ai](https://yir.ai/?ref=qianshuixia) 是图片视频 API 网关，启用方法：`VIDEO_PROVIDER=yir` 或后台改渠道，secret 写 `YIR_API_KEY`，模型和提示词在 `site.video.yir` 里改（`src/server/video/yir.ts`）。本地和 e2e 仍用 `mock`。
   - yir 没有模板所用的角色替换模型（`wan/v2.2-14b/animate/replace`）。接入用的是 Kling 2.6 Motion Control（reference 模式：照片 + 模板源视频），模板只交付接入代码，没有用真实 key 实测（提交、状态查询和错误映射由单元测试覆盖），效果和单价要自己验证，`costCentsPerSecond: 7` 只是估算，上线前按 [yir 模型页](https://yir.ai/models) 的报价改。
   - 两步走（可选，`site.video.yir.scene`，默认 `null`）：Motion Control 的成片背景取自用户照片。想保留源视频的场景，就先用图片模型（如 `google/nano-banana-2`）把照片里的人合成进源视频首帧，再拿合成图做动作参考。首帧图放在 `seed/templates/`，和源视频一样上传到 R2 的 `templates/`（`--content-type image/jpeg`）。合成图会传进 yir Files API，第二步用固定的 `file_id` 引用，重新提交时请求体不变。每单多一张图的费用（`scene.costCents`），用户照片也会经过图片模型的渠道。
   - 提交时用任务 id 作 `Idempotency-Key`：队列重投或 Worker 中断后重新提交，拿回的是同一个 yir 任务，不会重复计费。yir 按请求体识别同一请求，所以照片签名地址按任务创建时间生成，有效期 2 小时，重新提交时地址不变。
@@ -286,7 +286,7 @@ SMOKE_BASE_URL=https://video-template-staging.<子域名>.workers.dev SMOKE_EXPE
   - NanoAPI 会自己下载照片和源视频：用浏览器 User-Agent，读视频时发 Range 请求。源视频读不了时任务以 `internal_error` 失败（全额退款），不会报 `invalid_media`。upstream 实测里，不支持 Range 的服务器和不带扩展名的签名地址都出现过这种情况。模板的 `/media/*` 路由支持 Range，地址以 `.mp4` 结尾。不要在 `/media/*` 前面加人机验证，包括 Bot Fight Mode、Under Attack 模式和 WAF 质询。本地测试不要用 Pinggy 免费隧道，它会给浏览器返回一个提示页。
   - NanoAPI 创建任务没有幂等键，队列重投或 Worker 中断后重新提交会重复扣费。所以创建前先列出最近 3 小时的任务，照片地址和源视频地址都对得上就直接沿用那个任务（照片签名地址按任务创建时间生成，同一任务每次相同，不同任务一定不同）。列表请求失败时提交也失败（可重试的错误会重投），不会在查不了的情况下盲目创建。
   - 没配密钥、密钥失效、余额用完或账户被停用时，任务失败并退积分，同时立即触发“视频服务商账户”告警。NanoAPI 的 Key 没有月度额度，余额要自己在 NanoAPI 控制台盯着。结果每 30 秒轮询一次（文档要求间隔不少于 15 秒）。
-  - OpenGen（`opengen`，连接 secret `OPENGEN_API_KEY`，地址 var `OPENGEN_BASE_URL`，代码在 `src/server/video/opengen.ts`）是日常 auto：aimov 提交并查询 `{base}/v1/aimov/jobs`。厂商 Key 留在 OpenGen 主机。用户积分仍记在 aimov。jobs 正文是一图加源视频，不带 `component_id`。没配地址或密钥时，探测文案含「未配置」，新的 auto 单在扣积分前拒绝。HTTP 401/403 的文案是「不健康」，不是「未配置」。`OPENGEN_STUB=1` 只在 development 和 preview 做进程内联调。隧道、本机和 stub 都不是生产就绪。契约见 [docs/opengen.md](docs/opengen.md)。本仓库没有跑过真实 OpenGen 出片，也不把这次改动当成生产收口。
+  - OpenGen（`opengen`，连接 secret `OPENGEN_API_KEY`，地址 var `OPENGEN_BASE_URL`，代码在 `src/server/video/opengen.ts`）是三选一里的一家：只有选中 OpenGen 时，aimov 才提交并查询 `{base}/v1/aimov/jobs`。厂商 Key 留在 OpenGen 主机。用户积分仍记在 aimov。jobs 正文是一图加源视频，不带 `component_id`。选 OpenGen 不要求站上有 `FAL_KEY` 或 `YIR_API_KEY`。没配地址或密钥时，探测文案含「未配置」，新的 auto 单在扣积分前拒绝。HTTP 401/403 的文案是「不健康」，不是「未配置」。`OPENGEN_STUB=1` 只在 development 和 preview 做进程内联调。隧道、本机和 stub 都不是生产就绪。契约见 [docs/opengen.md](docs/opengen.md)。本仓库没有跑过真实 OpenGen 出片，也不把这次改动当成生产收口。OpenGen 网关内的多上游或 failover 不是本站三选一的前置。
 - **安全**：非 GET 的 `/api/*`（webhook、CSP 报告和前端错误上报除外）要求 `Origin` 与站点同源；上传按文件头校验真实类型；上传和生成按用户限流；封禁用户会立即使会话失效；管理操作写入 `admin_audit`。
   - 登录后的 `redirect`（登录页和 Google 回调）只接受站内路径：`src/lib/redirect.ts` 拒绝反斜杠、控制字符，以及规范化后以 `//` 开头的地址，所以 `/sign-in?redirect=/\evil.com` 这类链接会落到个人中心。
   - 5xx 错误只对管理员返回 `message`；其他人只拿到错误码，详情以 `[api] <method> <path> <code>: <message>` 写入 Workers Logs。

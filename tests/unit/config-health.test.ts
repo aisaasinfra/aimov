@@ -72,10 +72,15 @@ describe('checkConfig', () => {
       secrets: { DODO_API_KEY: 'd' },
     })
     expect(checkConfig(dodo)).toEqual([expect.objectContaining({ level: 'error', key: 'DODO_WEBHOOK_SECRET' })])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' } }))).toEqual(['warn:VIDEO_PROVIDER'])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' }, secrets: { YIR_API_KEY: 'y' } }))).toEqual(['warn:YIR_API_KEY', 'warn:VIDEO_PROVIDER'])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' } }))).toEqual(['error:YIR_API_KEY'])
+    expect(checkConfig(ready({ vars: { VIDEO_PROVIDER: 'yir' } }))[0]?.message).toContain('未配置')
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'yir' }, secrets: { YIR_API_KEY: 'y' } }))).toEqual([])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'fal' } }))).toEqual(['error:FAL_KEY'])
+    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'fal' }, secrets: { FAL_KEY: 'f' } }))).toEqual([])
+    const nano = checkConfig(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' }, secrets: { NANOAPI_API_KEY: 'n' } }))
+    expect(nano.map((issue) => `${issue.level}:${issue.key}`)).toEqual(['warn:VIDEO_PROVIDER'])
+    expect(nano[0]?.message).toContain('待确认')
     expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' } }))).toEqual(['warn:VIDEO_PROVIDER'])
-    expect(keys(ready({ vars: { VIDEO_PROVIDER: 'nanoapi' }, secrets: { NANOAPI_API_KEY: 'n' } }))).toEqual(['warn:NANOAPI_API_KEY', 'warn:VIDEO_PROVIDER'])
     expect(keys(ready({ vars: { VIDEO_PROVIDER: 'mock' } }))).toEqual(['error:VIDEO_PROVIDER'])
     expect(keys(ready({ vars: { OPENGEN_BASE_URL: '', OPENGEN_STUB: '0' }, secrets: { OPENGEN_API_KEY: '' } }))).toEqual(['error:OPENGEN_API_KEY', 'error:OPENGEN_BASE_URL'])
     expect(
